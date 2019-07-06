@@ -321,14 +321,14 @@ UniValue settxfee(const UniValue& params, bool fHelp)
         throw runtime_error(
                 "settxfee <amount>\n"
                 "\n"
-                "<amount> is a real and is rounded to the nearest 0.01\n"
+                "<amount> is a real and is rounded to the nearest 0.0001\n"
                 "\n"
                 "Sets the txfee for transactions\n");
 
     LOCK(cs_main);
 
     nTransactionFee = AmountFromValue(params[0]);
-    nTransactionFee = (nTransactionFee / CENT) * CENT;  // round to cent
+    nTransactionFee = (nTransactionFee / MIN_TX_FEE) * MIN_TX_FEE;  // round to MIN_TX_FEE
 
     return true;
 }
