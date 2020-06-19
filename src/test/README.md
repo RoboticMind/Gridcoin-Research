@@ -20,7 +20,5 @@ They are in their current state not relevant for gridcoin. Unusual transactions
 should be collected again from the gridcoin blockchain and replace
 the current test cases.
 
-For further reading, the following website is helpful in
-explaining how the boost unit test framework works:
-
-http://www.alittlemadness.com/2009/03/31/c-unit-testing-with-boosttest/
+For further reading, [see boot's documenation](https://www.boost.org/doc/libs/1_73_0/libs/test/doc/html/boost_test/intro.html)
+about how the boost unit test framework works
