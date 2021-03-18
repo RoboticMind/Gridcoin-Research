@@ -6,25 +6,24 @@
 #include <map>
 
 #include <boost/version.hpp>
-#include <boost/filesystem.hpp>
 
 #include <leveldb/env.h>
 #include <leveldb/cache.h>
 #include <leveldb/filter_policy.h>
 #include <leveldb/helpers/memenv/memenv.h>
 
-#include "kernel.h"
+#include "gridcoin/staking/kernel.h"
 #include "txdb.h"
 #include "main.h"
-#include "block.h"
 #include "ui_interface.h"
 #include "util.h"
 
 using namespace std;
 using namespace boost;
 
+extern bool fQtActive;
+
 leveldb::DB *txdb; // global pointer for LevelDB object instance
-void AddCPIDBlockHash(const std::string& cpid, const uint256& blockhash);
 
 static leveldb::Options GetOptions() {
     leveldb::Options options;
@@ -36,27 +35,27 @@ static leveldb::Options GetOptions() {
 
 void init_blockindex(leveldb::Options& options, bool fRemoveOld = false) {
     // First time init.
-    filesystem::path directory = GetDataDir() / "txleveldb";
+    fs::path directory = GetDataDir() / "txleveldb";
 
     if (fRemoveOld) {
-        filesystem::remove_all(directory); // remove directory
+        fs::remove_all(directory); // remove directory
         unsigned int nFile = 1;
 
         while (true)
         {
-            filesystem::path strBlockFile = GetDataDir() / strprintf("blk%04u.dat", nFile);
+            fs::path strBlockFile = GetDataDir() / strprintf("blk%04u.dat", nFile);
 
             // Break if no such file
-            if( !filesystem::exists( strBlockFile ) )
+            if( !fs::exists( strBlockFile ) )
                 break;
 
-            filesystem::remove(strBlockFile);
+            fs::remove(strBlockFile);
 
             nFile++;
         }
     }
 
-    filesystem::create_directory(directory);
+    fs::create_directory(directory);
     LogPrintf("Opening LevelDB in %s", directory.string());
     leveldb::Status status = leveldb::DB::Open(options, directory.string(), &txdb);
     if (!status.ok()) {
@@ -268,16 +267,6 @@ bool CTxDB::WriteHashBestChain(uint256 hashBestChain)
     return Write(string("hashBestChain"), hashBestChain);
 }
 
-bool CTxDB::ReadBestInvalidTrust(CBigNum& bnBestInvalidTrust)
-{
-    return Read(string("bnBestInvalidTrust"), bnBestInvalidTrust);
-}
-
-bool CTxDB::WriteBestInvalidTrust(CBigNum bnBestInvalidTrust)
-{
-    return Write(string("bnBestInvalidTrust"), bnBestInvalidTrust);
-}
-
 bool CTxDB::ReadGenericData(std::string KeyName, std::string& strValue)
 {
     return Read(string(KeyName.c_str()), strValue);
@@ -288,11 +277,9 @@ bool CTxDB::WriteGenericData(const std::string& strKey,const std::string& strDat
     return Write(string(strKey), strData);
 }
 
-
-
 static CBlockIndex *InsertBlockIndex(const uint256& hash)
 {
-    if (hash == 0)
+    if (hash.IsNull())
         return NULL;
 
     // Return existing
@@ -301,7 +288,7 @@ static CBlockIndex *InsertBlockIndex(const uint256& hash)
         return (*mi).second;
 
     // Create new
-    CBlockIndex* pindexNew = new CBlockIndex();
+    CBlockIndex* pindexNew = GRC::BlockIndexPool::GetNextBlockIndex();
     if (!pindexNew)
         throw runtime_error("LoadBlockIndex() : new CBlockIndex failed");
     mi = mapBlockIndex.insert(make_pair(hash, pindexNew)).first;
@@ -329,7 +316,7 @@ bool CTxDB::LoadBlockIndex()
     leveldb::Iterator *iterator = pdb->NewIterator(leveldb::ReadOptions());
     // Seek to start key.
     CDataStream ssStartKey(SER_DISK, CLIENT_VERSION);
-    ssStartKey << make_pair(string("blockindex"), uint256(0));
+    ssStartKey << make_pair(string("blockindex"), uint256());
     iterator->Seek(ssStartKey.str());
 
     int nLoaded = 0;
@@ -360,31 +347,22 @@ bool CTxDB::LoadBlockIndex()
         pindexNew->nFile          = diskindex.nFile;
         pindexNew->nBlockPos      = diskindex.nBlockPos;
         pindexNew->nHeight        = diskindex.nHeight;
-        pindexNew->nMint          = diskindex.nMint;
         pindexNew->nMoneySupply   = diskindex.nMoneySupply;
         pindexNew->nFlags         = diskindex.nFlags;
         pindexNew->nStakeModifier = diskindex.nStakeModifier;
-        pindexNew->prevoutStake   = diskindex.prevoutStake;
-        pindexNew->nStakeTime     = diskindex.nStakeTime;
         pindexNew->hashProof      = diskindex.hashProof;
         pindexNew->nVersion       = diskindex.nVersion;
         pindexNew->hashMerkleRoot = diskindex.hashMerkleRoot;
         pindexNew->nTime          = diskindex.nTime;
         pindexNew->nBits          = diskindex.nBits;
         pindexNew->nNonce         = diskindex.nNonce;
-
-        //9-26-2016 - Gridcoin - New Accrual Fields
-        pindexNew->cpid              = diskindex.cpid;
-        pindexNew->nResearchSubsidy  = diskindex.nResearchSubsidy;
-        pindexNew->nInterestSubsidy  = diskindex.nInterestSubsidy;
-        pindexNew->nMagnitude        = diskindex.nMagnitude;
-        pindexNew->nIsContract       = diskindex.nIsContract;
-        pindexNew->nIsSuperBlock     = diskindex.nIsSuperBlock;
+        pindexNew->m_researcher   = diskindex.m_researcher;
 
         nBlockCount++;
         // Watch for genesis block
         if (pindexGenesisBlock == NULL && blockHash == (!fTestNet ? hashGenesisBlock : hashGenesisBlockTestNet))
             pindexGenesisBlock = pindexNew;
+
         if(fQtActive)
         {
             if ((pindexNew->nHeight % 10000) == 0)
@@ -392,15 +370,10 @@ bool CTxDB::LoadBlockIndex()
                 nLoaded +=10000;
                 if (nLoaded > nHighest) nHighest=nLoaded;
                 if (nHighest < nGrandfather) nHighest=nGrandfather;
-                std::string sBlocksLoaded = ToString(nLoaded) + "/" + ToString(nHighest) + " Blocks Loaded";
-                uiInterface.InitMessage(_(sBlocksLoaded.c_str()));
+                uiInterface.InitMessage(strprintf("%" PRId64 "/%" PRId64 " %s", nLoaded, nHighest, _("Blocks Loaded")));
                 fprintf(stdout,"%d ",nLoaded); fflush(stdout);
             }
         }
-
-        // NovaCoin: build setStakeSeen
-        if (pindexNew->IsProofOfStake())
-            setStakeSeen.insert(make_pair(pindexNew->prevoutStake, pindexNew->nStakeTime));
 
         iterator->Next();
     }
@@ -408,33 +381,6 @@ bool CTxDB::LoadBlockIndex()
 
 
     LogPrintf("Time to memorize diskindex containing %i blocks : %15" PRId64 "ms", nBlockCount, GetTimeMillis() - nStart);
-    nStart = GetTimeMillis();
-
-
-    if (fRequestShutdown)
-        return true;
-
-    // Calculate nChainTrust
-    vector<pair<int, CBlockIndex*> > vSortedByHeight;
-    vSortedByHeight.reserve(mapBlockIndex.size());
-    for (auto const& item : mapBlockIndex)
-    {
-        CBlockIndex* pindex = item.second;
-        vSortedByHeight.push_back(make_pair(pindex->nHeight, pindex));
-    }
-    sort(vSortedByHeight.begin(), vSortedByHeight.end());
-    for (auto const& item : vSortedByHeight)
-    {
-        CBlockIndex* pindex = item.second;
-        pindex->nChainTrust = (pindex->pprev ? pindex->pprev->nChainTrust : 0) + pindex->GetBlockTrust();
-        // NovaCoin: calculate stake modifier checksum
-        pindex->nStakeModifierChecksum = GetStakeModifierChecksum(pindex);
-        if (!CheckStakeModifierCheckpoints(pindex->nHeight, pindex->nStakeModifierChecksum))
-            return error("CTxDB::LoadBlockIndex() : Failed stake modifier checkpoint height=%d, modifier=0x%016" PRIx64, pindex->nHeight, pindex->nStakeModifier);
-    }
-
-
-    LogPrintf("Time to calculate Chain Trust %15" PRId64 "ms", GetTimeMillis() - nStart);
     nStart = GetTimeMillis();
 
 
@@ -449,16 +395,12 @@ bool CTxDB::LoadBlockIndex()
         return error("CTxDB::LoadBlockIndex() : hashBestChain not found in the block index");
     pindexBest = mapBlockIndex[hashBestChain];
     nBestHeight = pindexBest->nHeight;
-    nBestChainTrust = pindexBest->nChainTrust;
 
-    LogPrintf("LoadBlockIndex(): hashBestChain=%s  height=%d  trust=%s  date=%s",
-      hashBestChain.ToString().substr(0,20), nBestHeight, CBigNum(nBestChainTrust).ToString(),
+    LogPrintf("LoadBlockIndex(): hashBestChain=%s  height=%d  date=%s",
+      hashBestChain.ToString().substr(0,20),
+      nBestHeight,
       DateTimeStrFormat("%x %H:%M:%S", pindexBest->GetBlockTime()));
 
-    // Load bnBestInvalidTrust, OK if it doesn't exist
-    CBigNum bnBestInvalidTrust;
-    ReadBestInvalidTrust(bnBestInvalidTrust);
-    nBestInvalidTrust = bnBestInvalidTrust.getuint256();
     nLoaded = 0;
     // Verify blocks in the best chain
     int nCheckLevel = GetArg("-checklevel", 1);
@@ -484,12 +426,11 @@ bool CTxDB::LoadBlockIndex()
                 nLoaded +=1000;
                 if (nLoaded > nHighest) nHighest=nLoaded;
                 if (nHighest < nGrandfather) nHighest=nGrandfather;
-                std::string sBlocksLoaded = ToString(nLoaded) + "/" + ToString(nHighest) + " Blocks Verified";
-                uiInterface.InitMessage(_(sBlocksLoaded.c_str()));
+                uiInterface.InitMessage(strprintf("%" PRId64 "/%" PRId64 " %s", nLoaded, nHighest, _("Blocks Verified")));
             }
         }
 
-        if (nCheckLevel>0 && !block.CheckBlock("LoadBlockIndex", pindex->nHeight,pindex->nMint, true, true, (nCheckLevel>6), true))
+        if (nCheckLevel>0 && !block.CheckBlock(pindex->nHeight, true, true, (nCheckLevel>6), true))
         {
             LogPrintf("LoadBlockIndex() : *** found bad block at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
             pindexFork = pindex->pprev;
@@ -600,58 +541,6 @@ bool CTxDB::LoadBlockIndex()
         CTxDB txdb;
         SetBestChain(txdb, block, pindexFork);
     }
-
-    LogPrintf("Set up RA ");
-    nStart = GetTimeMillis();
-
-    // Gridcoin - In order, set up Research Age hashes and lifetime fields.
-    // pindex is guaranteed to be valid here, even on an empty chain. Prior
-    // calls will set it up to the genesis block.
-    CBlockIndex* pindex = BlockFinder().FindByHeight(1);
-
-    LogPrintf("RA scan blocks %i-%i", pindex->nHeight, pindexBest->nHeight);
-    nLoaded=pindex->nHeight;
-    for ( ; pindex ; pindex= pindex->pnext )
-    {
-        if(fQtActive && (pindex->nHeight % 10000) == 0)
-        {
-            nLoaded +=10000;
-            if (nLoaded > nHighest) nHighest=nLoaded;
-            if (nHighest < nGrandfather) nHighest=nGrandfather;
-            std::string sBlocksLoaded = ToString(nLoaded) + "/" + ToString(nHighest) + " POR Blocks Verified";
-            uiInterface.InitMessage(_(sBlocksLoaded.c_str()));
-        }
-
-        // Block repair and reward collection only needs to be done after
-        // research age has been enabled.
-        if(!IsResearchAgeEnabled(pindex->nHeight))
-            continue;
-
-        if( pindex->IsUserCPID() && pindex->cpid == uint128() )
-        {
-            /* There were reports of 0000 cpid in index where INVESTOR should have been. Check */
-            auto bb = GetBoincBlockByIndex(pindex);
-            if( bb.cpid != pindex->GetCPID() )
-            {
-                if(fDebug)
-                    LogPrintf("WARNING: BlockIndex CPID %s did not match %s in block {%s %d}",
-                              pindex->GetCPID(), bb.cpid,
-                              pindex->GetBlockHash().GetHex(), pindex->nHeight );
-
-                /* Repair the cpid field */
-                pindex->SetCPID(bb.cpid);
-
-#if 0
-                if(!WriteBlockIndex(CDiskBlockIndex(pindex)))
-                    error("LoadBlockIndex: writing CDiskBlockIndex failed");
-#endif
-            }
-        }
-
-        AddRARewardBlock(pindex);
-    }
-
-    LogPrintf("RA Complete - RA Time %15" PRId64 "ms\n", GetTimeMillis() - nStart);
 
     return true;
 }

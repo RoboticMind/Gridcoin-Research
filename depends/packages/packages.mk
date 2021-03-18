@@ -1,28 +1,22 @@
-packages:=boost openssl
+packages:=boost openssl curl zlib bzip2 libzip
 native_packages := native_ccache
 
-qt_packages = qrencode zlib
+qt_packages = qrencode
 
-ifeq ($(QT_59),1)
-qt_x86_64_linux_packages:=qt59 expat dbus libxcb xcb_proto libXau xproto freetype fontconfig libX11 xextproto libXext xtrans
-qt_i686_linux_packages:=$(qt_x86_64_linux_packages)
-
-qt_darwin_packages=qt59
-qt_mingw32_packages=qt59
-else
-qt_x86_64_linux_packages:=qt expat dbus libxcb xcb_proto libXau xproto freetype fontconfig libX11 xextproto libXext xtrans
-qt_i686_linux_packages:=$(qt_x86_64_linux_packages)
-
+qt_linux_packages:=qt expat dbus libxcb xcb_proto libXau xproto freetype fontconfig libX11 xextproto libXext xtrans
 qt_darwin_packages=qt
 qt_mingw32_packages=qt
-endif
 
+ifeq ($(BDB_53),1)
+wallet_packages=bdb53
+else
 wallet_packages=bdb
+endif
 
 upnp_packages=miniupnpc
 
-darwin_native_packages = native_biplist native_ds_store native_mac_alias
+darwin_native_packages = native_ds_store native_mac_alias
 
 ifneq ($(build_os),darwin)
-darwin_native_packages += native_cctools native_cdrkit native_libdmg-hfsplus
+darwin_native_packages += native_cctools native_libdmg-hfsplus
 endif

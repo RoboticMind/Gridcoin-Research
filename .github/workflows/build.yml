@@ -1,0 +1,44 @@
+name: MacOS Build
+on: [workflow_dispatch]
+env:
+    EVENT_TYPE: ${{ github.event_name }}
+    COMMIT_COUNT: ${{ github.event.commits.length }}
+jobs:
+   test-macos:
+        name: macOS 10.15 native  [GOAL install]  [GUI]  [no depends]
+        runs-on: macos-10.15
+        env:
+            DANGER_RUN_CI_ON_HOST: true
+            CI_USE_APT_INSTALL: no
+            FILE_ENV: ./ci/test/00_setup_env_mac_host.sh
+            OS_NAME: macos
+        steps:
+        - name: checkout
+          uses: actions/checkout@v2
+        - name: cache
+          uses: actions/cache@v2
+          with:
+            path: |
+                ./ci/scratch/.ccache
+            key: ${{ runner.os }}
+        - name: install-packages
+          # We run the contrib/install_db4.sh script rather than installing the
+          # Homebrew berkeley-db4 formula to add the Berkeley DB 4.8 dependency
+          # to avoid a quirk with macOS on GitHub Actions. This script compiles
+          # BDB with the "--disable-replication" flag. The tests failed because
+          # BDB complained that "replication requires locking support".
+          #
+          # As of Xcode 12, Clang fails by default for functions called without
+          # an explicit declaration. This breaks the mutex detection in the BDB
+          # configure script so we switch it back to a warning:
+          run: |
+            brew install autoconf automake boost miniupnpc qrencode ccache leveldb librsvg libtool libzip openssl pkg-config python qt@5 xquartz
+            CFLAGS="-Wno-error=implicit-function-declaration" contrib/install_db4.sh .
+        - name: test
+          run: |
+            ./ci/test_run_all.sh
+        - name: Upload macOS builds
+          uses: actions/upload-artifact@v2
+          with:
+             name: macos10
+             path: /**/*.dmg

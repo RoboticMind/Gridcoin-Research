@@ -4,13 +4,13 @@
 #include "bitcoinunits.h"
 #include "util.h"
 #include "init.h"
+#include <codecvt>
 
 #include <QString>
 #include <QDateTime>
 #include <QDoubleValidator>
 #include <QFont>
 #include <QLineEdit>
-//#include <QUrl>
 #include <QTextDocument> // For Qt::escape
 #include <QUrlQuery>
 #include <QAbstractItemView>
@@ -19,9 +19,6 @@
 #include <QFileDialog>
 #include <QDesktopServices>
 #include <QThread>
-
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/fstream.hpp>
 
 #ifdef WIN32
 #ifdef _WIN32_WINNT
@@ -51,6 +48,87 @@ QString dateTimeStr(const QDateTime &date)
 QString dateTimeStr(qint64 nTime)
 {
     return dateTimeStr(QDateTime::fromTime_t((qint32)nTime));
+}
+
+QString formatPingTime(double dPingTime)
+{
+    return (dPingTime == std::numeric_limits<int64_t>::max()/1e6 || dPingTime == 0) ? QObject::tr("N/A") : QString(QObject::tr("%1 ms")).arg(QString::number((int)(dPingTime * 1000), 10));
+}
+
+QString formatTimeOffset(int64_t nTimeOffset)
+{
+  return QString(QObject::tr("%1 s")).arg(QString::number((int)nTimeOffset, 10));
+}
+
+QString formatBytes(uint64_t bytes)
+{
+    if(bytes < 1024)
+        return QString(QObject::tr("%1 B")).arg(bytes);
+    if(bytes < 1024 * 1024)
+        return QString(QObject::tr("%1 KB")).arg(bytes / 1024);
+    if(bytes < 1024 * 1024 * 1024)
+        return QString(QObject::tr("%1 MB")).arg(bytes / 1024 / 1024);
+
+    return QString(QObject::tr("%1 GB")).arg(bytes / 1024 / 1024 / 1024);
+}
+
+QString formatDurationStr(int secs)
+{
+    QStringList strList;
+    int days = secs / 86400;
+    int hours = (secs % 86400) / 3600;
+    int mins = (secs % 3600) / 60;
+    int seconds = secs % 60;
+
+    if (days)
+        strList.append(QString(QObject::tr("%1 d")).arg(days));
+    if (hours)
+        strList.append(QString(QObject::tr("%1 h")).arg(hours));
+    if (mins)
+        strList.append(QString(QObject::tr("%1 m")).arg(mins));
+    if (seconds || (!days && !hours && !mins))
+        strList.append(QString(QObject::tr("%1 s")).arg(seconds));
+
+    return strList.join(" ");
+}
+
+QString formatServicesStr(quint64 mask)
+{
+    QStringList strList;
+
+    // Just scan the last 8 bits for now.
+    for (int i = 0; i < 8; i++) {
+        uint64_t check = 1 << i;
+        if (mask & check)
+        {
+            switch (check)
+            {
+            case NODE_NETWORK:
+                strList.append("NETWORK");
+                break;
+            // These are for Bitcoin and are unused right now.
+            //case NODE_GETUTXO:
+            //    strList.append("GETUTXO");
+            //    break;
+            //case NODE_BLOOM:
+            //    strList.append("BLOOM");
+            //   break;
+            //case NODE_WITNESS:
+            //    strList.append("WITNESS");
+            //    break;
+            //case NODE_XTHIN:
+            //    strList.append("XTHIN");
+            //    break;
+            default:
+                strList.append(QString("%1[%2]").arg("UNKNOWN").arg(check));
+            }
+        }
+    }
+
+    if (strList.size())
+        return strList.join(" & ");
+    else
+        return QObject::tr("None");
 }
 
 QFont bitcoinAddressFont()
@@ -166,6 +244,28 @@ void copyEntryData(QAbstractItemView *view, int column, int role)
     }
 }
 
+QList<QModelIndex> getEntryData(QAbstractItemView *view, int column)
+{
+    if(!view || !view->selectionModel())
+        return QList<QModelIndex>();
+    return view->selectionModel()->selectedRows(column);
+}
+
+fs::path qstringToBoostPath(const QString &path)
+{
+    return fs::path(path.toStdString());
+}
+
+QString boostPathToQString(const fs::path &path)
+{
+    return QString::fromStdString(path.string());
+}
+
+QString getDefaultDataDirectory()
+{
+    return boostPathToQString(GetDefaultDataDir());
+}
+
 QString getSaveFileName(QWidget *parent, const QString &caption,
                                  const QString &dir,
                                  const QString &filter,
@@ -238,10 +338,10 @@ bool isObscured(QWidget *w)
 
 void openDebugLogfile()
 {
-    boost::filesystem::path pathDebug = GetDataDir() / "debug.log";
+    fs::path pathDebug = GetDataDir() / "debug.log";
 
     /* Open debug.log with the associated application */
-    if (boost::filesystem::exists(pathDebug))
+    if (fs::exists(pathDebug))
         QDesktopServices::openUrl(QUrl::fromLocalFile(QString::fromStdString(pathDebug.string())));
 }
 
@@ -269,46 +369,153 @@ bool ToolTipToRichTextFilter::eventFilter(QObject *obj, QEvent *evt)
     return QObject::eventFilter(obj, evt);
 }
 
+WindowContextHelpButtonHintFilter::WindowContextHelpButtonHintFilter(QObject *parent) :
+    QObject(parent)
+{
+
+}
+
+bool WindowContextHelpButtonHintFilter::eventFilter (QObject *obj, QEvent *event)
+{
+    if (event->type () == QEvent::Create)
+    {
+        if (obj->isWidgetType ())
+        {
+            auto w = static_cast<QWidget *> (obj);
+            w->setWindowFlags (w->windowFlags () & (~Qt::WindowContextHelpButtonHint));
+        }
+    }
+    return QObject::eventFilter (obj, event);
+}
+
+
+struct AutoStartupArguments
+{
+    std::string link_name_suffix;
+    fs::path data_dir;
+    std::string arguments;
+};
+
+AutoStartupArguments GetAutoStartupArguments(bool fStartMin = true)
+{
+    // This helper function checks for the presence of certain startup arguments
+    // to the current running instance that should be relevant for automatic restart
+    // (currently testnet, datadir, scraper, explorer). It adds -testnet
+    // to the link name as a suffix if -testnet is specified otherwise adds mainnet,
+    // and then adds the other three as arguments if they were specified for the
+    // running instance. This allows two different automatic startups, one for
+    // mainnet, and the other for testnet, and each of them can have different datadir,
+    // scraper, and/or explorer arguments.
+
+    AutoStartupArguments result;
+
+    // We do NOT want testnet appended here for the path in the autostart
+    // shortcut, so use false in GetDataDir().
+    result.data_dir = GetDataDir(false);
+
+    result.arguments = {};
+
+    if (fTestNet)
+    {
+        result.link_name_suffix += "-testnet";
+        result.arguments = "-testnet";
+    }
+    else
+    {
+        result.link_name_suffix += "-mainnet";
+    }
+
+    if (fStartMin)
+    {
+        result.arguments += " -min";
+    }
+
+    for (const auto& flag : { "-scraper", "-explorer" })
+    {
+        if (GetBoolArg(flag))
+        {
+            (result.arguments += " ") += flag;
+        }
+    }
+
+    return result;
+}
+
 #ifdef WIN32
-boost::filesystem::path static StartupShortcutPath()
+fs::path static StartupShortcutLegacyPath()
 {
     return GetSpecialFolderPath(CSIDL_STARTUP) / "Gridcoin.lnk";
 }
 
-bool GetStartOnSystemStartup()
+fs::path static StartupShortcutPath()
 {
-    // check for Bitcoin.lnk
-    return boost::filesystem::exists(StartupShortcutPath());
+    std::string link_name_suffix = GetAutoStartupArguments().link_name_suffix;
+    std::string link_name_root = "Gridcoin";
+
+    return GetSpecialFolderPath(CSIDL_STARTUP) / (link_name_root + link_name_suffix + ".lnk");
 }
 
-bool SetStartOnSystemStartup(bool fAutoStart)
+bool GetStartOnSystemStartup()
 {
+    // check for Gridcoin.lnk
+    return fs::exists(StartupShortcutPath());
+}
+
+bool SetStartOnSystemStartup(bool fAutoStart, bool fStartMin)
+{
+    // Remove the legacy shortcut unconditionally.
+    fs::remove(StartupShortcutLegacyPath());
+
     // If the shortcut exists already, remove it for updating
-    boost::filesystem::remove(StartupShortcutPath());
+    fs::remove(StartupShortcutPath());
+
+    // Get auto startup arguments
+    AutoStartupArguments autostartup = GetAutoStartupArguments(fStartMin);
 
     if (fAutoStart)
     {
         CoInitialize(NULL);
 
         // Get a pointer to the IShellLink interface.
-        IShellLink* psl = NULL;
+        IShellLinkW* psl = NULL;
         HRESULT hres = CoCreateInstance(CLSID_ShellLink, NULL,
-                                CLSCTX_INPROC_SERVER, IID_IShellLink,
+                                CLSCTX_INPROC_SERVER, IID_IShellLinkW,
                                 reinterpret_cast<void**>(&psl));
 
         if (SUCCEEDED(hres))
         {
             // Get the current executable path
-            TCHAR pszExePath[MAX_PATH];
-            GetModuleFileName(NULL, pszExePath, sizeof(pszExePath));
+            WCHAR pszExePath[MAX_PATH];
+            GetModuleFileNameW(NULL, pszExePath, sizeof(pszExePath));
 
-            TCHAR pszArgs[5] = TEXT("-min");
+            std::wstring autostartup_arguments;
+            std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+
+            if (!autostartup.data_dir.empty())
+            {
+                autostartup_arguments = converter.from_bytes("-datadir=\"")
+                        + autostartup.data_dir.wstring()
+                        + converter.from_bytes("\" ");
+            }
+
+            autostartup_arguments += converter.from_bytes(autostartup.arguments);
+
+            LPCTSTR pszArgs = autostartup_arguments.c_str();
 
             // Set the path to the shortcut target
             psl->SetPath(pszExePath);
-            PathRemoveFileSpec(pszExePath);
+            PathRemoveFileSpecW(pszExePath);
             psl->SetWorkingDirectory(pszExePath);
-            psl->SetShowCmd(SW_SHOWMINNOACTIVE);
+
+            if (fStartMin)
+            {
+                psl->SetShowCmd(SW_SHOWMINNOACTIVE);
+            }
+            else
+            {
+                psl->SetShowCmd(SW_SHOWNORMAL);
+            }
+
             psl->SetArguments(pszArgs);
 
             // Query IShellLink for the IPersistFile interface for
@@ -318,11 +525,8 @@ bool SetStartOnSystemStartup(bool fAutoStart)
                                        reinterpret_cast<void**>(&ppf));
             if (SUCCEEDED(hres))
             {
-                WCHAR pwsz[MAX_PATH];
-                // Ensure that the string is ANSI.
-                MultiByteToWideChar(CP_ACP, 0, StartupShortcutPath().string().c_str(), -1, pwsz, MAX_PATH);
                 // Save the link by calling IPersistFile::Save.
-                hres = ppf->Save(pwsz, TRUE);
+                hres = ppf->Save(StartupShortcutPath().wstring().c_str(), TRUE);
                 ppf->Release();
                 psl->Release();
                 CoUninitialize();
@@ -341,10 +545,8 @@ bool SetStartOnSystemStartup(bool fAutoStart)
 // Follow the Desktop Application Autostart Spec:
 //  http://standards.freedesktop.org/autostart-spec/autostart-spec-latest.html
 
-boost::filesystem::path static GetAutostartDir()
+fs::path static GetAutostartDir()
 {
-    namespace fs = boost::filesystem;
-
     char* pszConfigHome = getenv("XDG_CONFIG_HOME");
     if (pszConfigHome) return fs::path(pszConfigHome) / "autostart";
     char* pszHome = getenv("HOME");
@@ -352,14 +554,22 @@ boost::filesystem::path static GetAutostartDir()
     return fs::path();
 }
 
-boost::filesystem::path static GetAutostartFilePath()
+fs::path static GetAutostartLegacyFilePath()
 {
     return GetAutostartDir() / "gridcoin.desktop";
 }
 
+fs::path static GetAutostartFilePath()
+{
+    std::string link_name_suffix = GetAutoStartupArguments().link_name_suffix;
+    std::string link_name_root = "gridcoin";
+
+    return GetAutostartDir() / (link_name_root + link_name_suffix + ".desktop");
+}
+
 bool GetStartOnSystemStartup()
 {
-    boost::filesystem::ifstream optionFile(GetAutostartFilePath());
+    fsbridge::ifstream optionFile(GetAutostartFilePath());
     if (!optionFile.good())
         return false;
     // Scan through file for "Hidden=true":
@@ -376,10 +586,16 @@ bool GetStartOnSystemStartup()
     return true;
 }
 
-bool SetStartOnSystemStartup(bool fAutoStart)
+bool SetStartOnSystemStartup(bool fAutoStart, bool fStartMin)
 {
+    // Remove legacy autostart path if it exists.
+    if (fs::exists(GetAutostartLegacyFilePath()))
+    {
+        fs::remove(GetAutostartLegacyFilePath());
+    }
+
     if (!fAutoStart)
-        boost::filesystem::remove(GetAutostartFilePath());
+        fs::remove(GetAutostartFilePath());
     else
     {
         char pszExePath[MAX_PATH+1];
@@ -387,16 +603,25 @@ bool SetStartOnSystemStartup(bool fAutoStart)
         if (readlink("/proc/self/exe", pszExePath, sizeof(pszExePath)-1) == -1)
             return false;
 
-        boost::filesystem::create_directories(GetAutostartDir());
+        AutoStartupArguments autostartup = GetAutoStartupArguments(fStartMin);
 
-        boost::filesystem::ofstream optionFile(GetAutostartFilePath(), std::ios_base::out|std::ios_base::trunc);
+        fs::create_directories(GetAutostartDir());
+
+        fsbridge::ofstream optionFile(GetAutostartFilePath(), std::ios_base::out|std::ios_base::trunc);
         if (!optionFile.good())
             return false;
         // Write a bitcoin.desktop file to the autostart directory:
         optionFile << "[Desktop Entry]\n";
         optionFile << "Type=Application\n";
-        optionFile << "Name=Gridcoin\n";
-        optionFile << "Exec=" << pszExePath << " -min\n";
+        optionFile << "Name=Gridcoin" + autostartup.link_name_suffix + "\n";
+        optionFile << "Exec=" << static_cast<fs::path>(pszExePath);
+
+        if (!autostartup.data_dir.empty())
+        {
+            optionFile << " -datadir=" << autostartup.data_dir;
+        }
+
+        optionFile << " " << autostartup.arguments << "\n";
         optionFile << "Terminal=false\n";
         optionFile << "Hidden=false\n";
         optionFile.close();
@@ -409,7 +634,7 @@ bool SetStartOnSystemStartup(bool fAutoStart)
 // https://developer.apple.com/library/mac/#documentation/MacOSX/Conceptual/BPSystemStartup/Articles/CustomLogin.html
 
 bool GetStartOnSystemStartup() { return false; }
-bool SetStartOnSystemStartup(bool fAutoStart) { return false; }
+bool SetStartOnSystemStartup(bool fAutoStart, bool fStartMin) { return false; }
 
 #endif
 
@@ -458,4 +683,3 @@ void HelpMessageBox::showOrPrint()
 }
 
 } // namespace GUIUtil
-

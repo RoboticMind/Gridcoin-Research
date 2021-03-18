@@ -1,3 +1,7 @@
+// Copyright (c) 2014-2020 The Gridcoin developers
+// Distributed under the MIT/X11 software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #include <stdlib.h>
 #include <algorithm>
 #include <string>
@@ -29,26 +33,19 @@
 #include <QString>
 #include <QVBoxLayout>
 
-#include "votingdialog.h"
 #include "util.h"
-#include "rpcprotocol.h"
+#include "gridcoin/voting/builders.h"
+#include "gridcoin/voting/poll.h"
+#include "gridcoin/voting/registry.h"
+#include "gridcoin/voting/result.h"
+#include "qt/walletmodel.h"
+#include "votingdialog.h"
+#include "rpc/protocol.h"
+#include "sync.h"
 
-extern std::string ExtractXML(std::string XMLdata, std::string key, std::string key_end);
+using namespace GRC;
 
-static std::string GetFoundationGuid(const std::string &sTitle)
-{
-    const std::string foundation("[foundation ");
-    size_t nPos1 = sTitle.find(foundation);
-    if (nPos1 == std::string::npos)
-        return std::string();
-    nPos1 += foundation.size();
-    size_t nPos2 = sTitle.find("]", nPos1);
-    if (nPos2 == std::string::npos)
-        return std::string();
-    if (nPos2 != nPos1 + 36)
-        return std::string();
-    return sTitle.substr(nPos1, 36);
-}
+extern CCriticalSection cs_main;
 
 static int column_alignments[] = {
     Qt::AlignRight|Qt::AlignVCenter, // RowNumber
@@ -237,8 +234,53 @@ Qt::ItemFlags VotingTableModel::flags(const QModelIndex &index) const
     return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 }
 
+namespace {
+VotingItem* BuildPollItem(const PollRegistry::Sequence::Iterator& iter)
+{
+    const PollResultOption result = PollResult::BuildFor(iter->Ref());
+
+    if (!result) {
+        return nullptr;
+    }
+
+    const Poll& poll = result->m_poll;
+
+    VotingItem *item = new VotingItem;
+    item->pollTxid_ = iter->Ref().Txid();
+    item->expiration_ = QDateTime::fromMSecsSinceEpoch(poll.Expiration() * 1000);
+    item->shareType_ = QString::fromStdString(poll.WeightTypeToString());
+    item->responseType_ = QString::fromStdString(poll.ResponseTypeToString());
+    item->totalParticipants_ = result->m_votes.size();
+    item->totalShares_ = result->m_total_weight / (double)COIN;
+
+    item->title_ = QString::fromStdString(poll.m_title).replace("_"," ");
+    item->question_ = QString::fromStdString(poll.m_question).replace("_"," ");
+    item->url_ = QString::fromStdString(poll.m_url).trimmed();
+
+    if (!item->url_.startsWith("http://") && !item->url_.startsWith("https://")) {
+        item->url_.prepend("http://");
+    }
+
+    for (size_t i = 0; i < result->m_responses.size(); ++i) {
+        item->vectorOfAnswers_.emplace_back(
+            poll.Choices().At(i)->m_label,
+            result->m_responses[i].m_weight / (double)COIN,
+            result->m_responses[i].m_votes);
+    }
+
+    if (!result->m_votes.empty()) {
+        item->bestAnswer_ = QString::fromStdString(result->WinnerLabel()).replace("_"," ");
+    }
+
+    return item;
+}
+} // Anonymous namespace
+
 void VotingTableModel::resetData(bool history)
 {
+    std::string function = __func__;
+    function += ": ";
+
     // data: erase
     if (data_.size()) {
         beginRemoveRows(QModelIndex(), 0, data_.size() - 1);
@@ -249,34 +291,23 @@ void VotingTableModel::resetData(bool history)
         endRemoveRows();
     }
 
+    g_timer.GetTimes(function + "erase data", "votedialog");
+
     // retrieve data
     std::vector<VotingItem *> items;
-    std::string sVotingPayload;
-    Polls = GetPolls(true, history, "");
 
-    //time_t now = time(NULL); // needed if history should be limited
-
-    for(const auto& iterPoll: Polls)
     {
-        std::string sTitle = iterPoll.title;
-        std::string sId = GetFoundationGuid(sTitle);
-        if (sTitle.size() && (sId.empty()))
-        {
-            QString sExpiration = QString::fromStdString(iterPoll.expiration);
-            VotingItem *item = new VotingItem;
-            item->rowNumber_ = items.size() + 1;
-            item->title_ = QString::fromStdString(iterPoll.title).replace("_"," ");
-            item->expiration_ = QDateTime::fromString(QString::fromStdString(iterPoll.expiration), "M-d-yyyy HH:mm:ss");
-            item->shareType_ = QString::fromStdString(iterPoll.sharetype);
-            item->question_ = QString::fromStdString(iterPoll.question).replace("_"," ");
-            item->answers_ = QString::fromStdString(iterPoll.sAnswers).replace("_"," ");
-            item->vectorOfAnswers_ = iterPoll.answers;
-            item->totalParticipants_ = iterPoll.total_participants;
-            item->totalShares_ = iterPoll.total_shares;
-            item->url_ = QString::fromStdString(iterPoll.url);
-            item->bestAnswer_ = QString::fromStdString(iterPoll.best_answer).replace("_"," ");
-            items.push_back(item);
+        LOCK(cs_main);
+
+        for (const auto iter : GetPollRegistry().Polls().OnlyActive(!history)) {
+            if (VotingItem* item = BuildPollItem(iter)) {
+                item->rowNumber_ = items.size() + 1;
+                items.push_back(item);
+
+            }
         }
+
+        g_timer.GetTimes(function + "populate poll results (cs_main lock)", "votedialog");
     }
 
     // data: populate
@@ -285,6 +316,8 @@ void VotingTableModel::resetData(bool history)
         for(size_t i=0; i < items.size(); i++)
             data_.append(items[i]);
         endInsertRows();
+
+        g_timer.GetTimes(function + "insert data in display table", "votedialog");
     }
 }
 
@@ -404,21 +437,50 @@ VotingDialog::VotingDialog(QWidget *parent)
     watcher.setProperty("running", false);
     connect(&watcher, SIGNAL(finished()), this, SLOT(onLoadingFinished()));
     loadingIndicator = new QLabel(this);
-    loadingIndicator->move(50,170);
+    loadingIndicator->setWordWrap(true);
+
+    groupboxvlayout->addWidget(loadingIndicator);
 
     chartDialog_ = new VotingChartDialog(this);
     voteDialog_ = new VotingVoteDialog(this);
     pollDialog_ = new NewPollDialog(this);
+
+    loadingIndicator->setText(tr("Press reload to load polls... This can take several minutes, and the wallet may not respond until finished."));
+    tableView_->hide();
+    loadingIndicator->show();
+
+    QObject::connect(vote_update_age_timer, SIGNAL(timeout()), this, SLOT(setStale()));
+}
+
+void VotingDialog::setModel(WalletModel *wallet_model)
+{
+    if (!wallet_model) {
+        return;
+    }
+
+    voteDialog_->setModel(wallet_model);
+    pollDialog_->setModel(wallet_model);
 }
 
 void VotingDialog::loadPolls(bool history)
 {
+    std::string function = __func__;
+    function += ": ";
+
     bool isRunning = watcher.property("running").toBool();
     if (tableModel_&& !isRunning)
     {
-        loadingIndicator->setText(tr("...loading data!"));
+        loadingIndicator->setText(tr("Recalculating voting weights... This can take several minutes, and the wallet may not respond until finished."));
+        tableView_->hide();
         loadingIndicator->show();
+
+        g_timer.InitTimer("votedialog", LogInstance().WillLogCategory(BCLog::LogFlags::MISC));
+        vote_update_age_timer->start(STALE);
+
         QFuture<void> future = QtConcurrent::run(tableModel_, &VotingTableModel::resetData, history);
+
+        g_timer.GetTimes(function + "Post future assignment", "votedialog");
+
         watcher.setProperty("running", true);
         watcher.setFuture(future);
     }
@@ -434,6 +496,26 @@ void VotingDialog::loadHistory(void)
     loadPolls(true);
 }
 
+void VotingDialog::setStale(void)
+{
+    LogPrint(BCLog::LogFlags::MISC, "INFO: %s called.", __func__);
+
+    // If the stale flag is not set, but this function is called, it is from the timeout
+    // trigger of the vote_update_age_timer. Therefore set the loading indicator to stale
+    // and set the stale flag to true. The stale flag will be reset and the timer restarted
+    // when the loadPolls is called to refresh.
+    if (!stale)
+    {
+        loadingIndicator->setText(tr("Poll data is more than one hour old. Press reload to update... "
+                                     "This can take several minutes, and the wallet may not respond "
+                                     "until finished."));
+        tableView_->hide();
+        loadingIndicator->show();
+
+        stale = true;
+    }
+}
+
 void VotingDialog::onLoadingFinished(void)
 {
     watcher.setProperty("running", false);
@@ -441,9 +523,12 @@ void VotingDialog::onLoadingFinished(void)
     int rowsCount = tableView_->verticalHeader()->count();
     if (rowsCount > 0) {
         loadingIndicator->hide();
+        tableView_->show();
     } else {
         loadingIndicator->setText(tr("No polls !"));
     }
+
+    stale = false;
 }
 
 void VotingDialog::tableColResize(void)
@@ -666,12 +751,19 @@ VotingChartDialog::VotingChartDialog(QWidget *parent)
     resTabWidget->addTab(m_chartView, tr("Chart"));
 #endif
 
-    answerTable_ = new QTableWidget(this);
-    answerTable_->setColumnCount(3);
-    answerTable_->setRowCount(0);
-    answerTableHeader<<"Answer"<<"Shares"<<"Percentage";
-    answerTable_->setHorizontalHeaderLabels(answerTableHeader);
+    answerModel_ = new QStandardItemModel();
+    answerModel_->setColumnCount(3);
+    answerModel_->setRowCount(0);
+    answerModel_->setHeaderData(0, Qt::Horizontal, tr("Answer"));
+    answerModel_->setHeaderData(1, Qt::Horizontal, tr("Shares"));
+    answerModel_->setHeaderData(2, Qt::Horizontal, "%");
+
+    answerTable_ = new QTableView(this);
+    answerTable_->setModel(answerModel_);
     answerTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    answerTable_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeMode::ResizeToContents);
+    answerTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeMode::ResizeToContents);
+    answerTable_->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
     answerTable_->setEditTriggers( QAbstractItemView::NoEditTriggers );
     resTabWidget->addTab(answerTable_, tr("List"));
     vlayout->addWidget(resTabWidget);
@@ -682,7 +774,8 @@ void VotingChartDialog::resetData(const VotingItem *item)
     if (!item)
         return;
 
-    answerTable_->setRowCount(0);
+    answerModel_->setRowCount(0);
+    answerTable_->sortByColumn(-1, Qt::AscendingOrder);
     answerTable_->setSortingEnabled(false);
 
 #ifdef QT_CHARTS_LIB
@@ -696,36 +789,40 @@ void VotingChartDialog::resetData(const VotingItem *item)
     question_->setText(item->question_);
     url_->setText("<a href=\""+item->url_+"\">"+item->url_+"</a>");
     answer_->setText(item->bestAnswer_);
+    answer_->setVisible(!item->bestAnswer_.isEmpty());
+    answerModel_->setRowCount(item->vectorOfAnswers_.size());
 
-    std::vector<polling::Vote> vectorOfAnswers = item->vectorOfAnswers_;
-    answerTable_->setRowCount(vectorOfAnswers.size());
-    std::vector<int> iShares;
-    std::vector<QString> sAnswerNames;
-    int sharesSum = 0;
-    //for(size_t y=1; y < vAnswers.size(); y++)
-    for(polling::Vote iterAnswer: vectorOfAnswers)
+    for (size_t y = 0; y < item->vectorOfAnswers_.size(); y++)
     {
-        sAnswerNames.push_back(QString::fromStdString(iterAnswer.answer).replace("_"," "));
-        iShares.push_back(iterAnswer.shares);
-        sharesSum += iterAnswer.shares;
-    }
-    for(size_t y=0; y < sAnswerNames.size(); y++)
-    {
-        answerTable_->setItem(y, 0, new QTableWidgetItem(sAnswerNames[y]));
-        QTableWidgetItem *iSharesItem = new QTableWidgetItem();
-        iSharesItem->setData(Qt::DisplayRole,iShares[y]);
-        answerTable_->setItem(y, 1, iSharesItem);
-        QTableWidgetItem *percentItem = new QTableWidgetItem();
-        percentItem->setData(Qt::DisplayRole,(float)iShares[y]/(float)sharesSum*100);
-        answerTable_->setItem(y, 2, percentItem);
+        const auto& responses = item->vectorOfAnswers_;
+        const QString answer = QString::fromStdString(responses[y].answer);
+
+        QStandardItem *answerItem = new QStandardItem(answer);
+        answerItem->setData(answer);
+        answerModel_->setItem(y, 0, answerItem);
+        QStandardItem *iSharesItem = new QStandardItem(QString::number(responses[y].shares, 'f', 0));
+        iSharesItem->setData(responses[y].shares);
+        iSharesItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        answerModel_->setItem(y, 1, iSharesItem);
+        QStandardItem *percentItem = new QStandardItem();
+
+        if (item->totalShares_ > 0) {
+            const double ratio = responses[y].shares / (double)item->totalShares_;
+            percentItem->setText(QString::number(ratio * 100, 'f', 2));
+            percentItem->setData(ratio * 100);
+            percentItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        }
+
+        answerModel_->setItem(y, 2, percentItem);
 
 #ifdef QT_CHARTS_LIB
-        QtCharts::QPieSlice *slice = new QtCharts::QPieSlice(sAnswerNames[y], iShares[y]);
+        QtCharts::QPieSlice *slice = new QtCharts::QPieSlice(answer, responses[y].shares);
         series->append(slice);
         chart_->addSeries(series);
 #endif
     }
 
+    answerModel_->setSortRole(Qt::UserRole+1);
     answerTable_->setSortingEnabled(true);
 }
 
@@ -733,6 +830,7 @@ void VotingChartDialog::resetData(const VotingItem *item)
 //
 VotingVoteDialog::VotingVoteDialog(QWidget *parent)
     : QDialog(parent)
+    , m_wallet_model(nullptr)
 {
     setWindowTitle(tr("PlaceVote"));
     resize(QDesktopWidget().availableGeometry(this).size() * 0.4);
@@ -770,15 +868,25 @@ VotingVoteDialog::VotingVoteDialog(QWidget *parent)
     url_->setOpenExternalLinks(true);
     glayout->addWidget(url_, 1, 1);
 
+    QLabel *responseTypeLabel = new QLabel(tr("Response Type: "));
+    responseTypeLabel->setAlignment(Qt::AlignLeft|Qt::AlignVCenter);
+    responseTypeLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    glayout->addWidget(responseTypeLabel, 3, 0);
+
+    responseType_ = new QLabel();
+    responseType_->setAlignment(Qt::AlignLeft|Qt::AlignVCenter);
+    responseType_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    glayout->addWidget(responseType_, 3, 1);
+
     QLabel *bestAnswer = new QLabel(tr("Best Answer: "));
     bestAnswer->setAlignment(Qt::AlignLeft|Qt::AlignVCenter);
     bestAnswer->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    glayout->addWidget(bestAnswer, 3, 0);
+    glayout->addWidget(bestAnswer, 4, 0);
 
     answer_ = new QLabel();
     answer_->setAlignment(Qt::AlignLeft|Qt::AlignVCenter);
     answer_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    glayout->addWidget(answer_, 3, 1);
+    glayout->addWidget(answer_, 4, 1);
 
     answerList_ = new QListWidget(this);
     vlayout->addWidget(answerList_);
@@ -799,6 +907,15 @@ VotingVoteDialog::VotingVoteDialog(QWidget *parent)
 
 }
 
+void VotingVoteDialog::setModel(WalletModel *wallet_model)
+{
+    if (!wallet_model) {
+        return;
+    }
+
+    m_wallet_model = wallet_model;
+}
+
 void VotingVoteDialog::resetData(const VotingItem *item)
 {
     if (!item)
@@ -808,67 +925,69 @@ void VotingVoteDialog::resetData(const VotingItem *item)
     voteNote_->clear();
     question_->setText(item->question_);
     url_->setText("<a href=\""+item->url_+"\">"+item->url_+"</a>");
+    responseType_->setText(item->responseType_);
     answer_->setText(item->bestAnswer_);
-    sVoteTitle=item->title_;
-    std::string listOfAnswers = item->answers_.toUtf8().constData();
-    std::vector<std::string> vAnswers = split(listOfAnswers, ";");
-    for(size_t y=0; y < vAnswers.size(); y++) {
-        QListWidgetItem *answerItem = new QListWidgetItem(QString::fromStdString(vAnswers[y]).replace("_"," "),answerList_);
+    pollTxid_ = item->pollTxid_;
+
+    for (const auto& choice : item->vectorOfAnswers_) {
+        QListWidgetItem *answerItem = new QListWidgetItem(QString::fromStdString(choice.answer).replace("_", " "), answerList_);
         answerItem->setCheckState(Qt::Unchecked);
     }
 }
 
 void VotingVoteDialog::vote(void)
 {
-    QString sAnswer = GetVoteValue();
-    voteNote_->setStyleSheet("QLabel { color : red; }");
+    // This overall try-catch is needed to properly catch the VoteBuilder builder move constructor and assignment,
+    // otherwise an expired poll bubbles up all the way to the app level and ends execution with the exception handler
+    // in bitcoin.cpp, which is not what is intended here. It also catchs any thrown VotingError exceptions in
+    // builder.AddResponse() and SendVoteContract().
+    try {
+        voteNote_->setStyleSheet("QLabel { color : red; }");
 
-    if(sAnswer.isEmpty()){
-        voteNote_->setText(tr("Vote failed! Select one or more items to vote."));
+        LOCK(cs_main);
+
+        const PollReference* ref = GetPollRegistry().TryByTxid(pollTxid_);
+
+        if (!ref) {
+            voteNote_->setText(tr("Poll not found."));
+            return;
+        }
+
+        const PollOption poll = ref->TryReadFromDisk();
+
+        if (!poll) {
+            voteNote_->setText(tr("Failed to load poll from disk"));
+            return;
+        }
+
+        VoteBuilder builder = VoteBuilder::ForPoll(*poll, ref->Txid());
+
+        for (int row = 0; row < answerList_->count(); ++row) {
+            if (answerList_->item(row)->checkState() == Qt::Checked) {
+                builder = builder.AddResponse(row);
+            }
+        }
+
+        const WalletModel::UnlockContext unlock_context(m_wallet_model->requestUnlock());
+
+        if (!unlock_context.isValid()) {
+            voteNote_->setText(tr("Please unlock the wallet."));
+            return;
+        }
+
+        SendVoteContract(std::move(builder));
+
+        voteNote_->setStyleSheet("QLabel { color : green; }");
+        voteNote_->setText(tr("Success. Vote will activate with the next block."));
+    } catch (const VotingError& e){
+        voteNote_->setText(e.what());
         return;
     }
-
-    // replace spaces with underscores
-    sAnswer.replace(" ","_");
-    sVoteTitle.replace(" ","_");
-
-    // Voting current throws JSON RPC errors which is incorrect since they
-    // aren't really JSON RPC calls. This should be changed to throw an
-    // std exception instead, and the actual RPC calls should be wrapped
-    // to only validate input, forward the call to CreateVoteContract and
-    // translate the exception if necessary.
-    try
-    {
-        std::pair<std::string,std::string> pollCreationResult = CreateVoteContract(sVoteTitle.toStdString(), sAnswer.toStdString());
-        const std::string &sResult = pollCreationResult.first + pollCreationResult.second;
-
-        if (sResult.find("Success") != std::string::npos) {
-            voteNote_->setStyleSheet("QLabel { color : green; }");
-        }
-        voteNote_->setText(QString::fromStdString(sResult));
-    }
-    catch(const UniValue& e)
-    {
-        voteNote_->setText(
-                    QString("Vote error: %1")
-                        .arg(e["message"].get_str().c_str()));
-    }
-}
-
-QString VotingVoteDialog::GetVoteValue(void)
-{
-    QString sVote = "";
-    for(int row = 0; row < answerList_->count(); row++) {
-        QListWidgetItem *item = answerList_->item(row);
-        if(item->checkState() == Qt::Checked)
-            sVote += item->text() + ";";
-    }
-    sVote.chop(1);
-    return sVote;
 }
 
 NewPollDialog::NewPollDialog(QWidget *parent)
     : QDialog(parent)
+    , m_wallet_model(nullptr)
 {
     setWindowTitle(tr("Create Poll"));
     resize(QDesktopWidget().availableGeometry(this).size() * 0.4);
@@ -932,10 +1051,36 @@ NewPollDialog::NewPollDialog(QWidget *parent)
 
     shareTypeBox_ = new QComboBox(this);
     QStringList shareTypeBoxItems;
-    shareTypeBoxItems << "Magnitude" << "Balance" << "Both" << "CPIDCount" << "ParticipantCount";
+    shareTypeBoxItems << tr("Balance") << tr("Magnitude+Balance");
     shareTypeBox_->addItems(shareTypeBoxItems);
-    shareTypeBox_->setCurrentIndex(2);
     glayout->addWidget(shareTypeBox_, 4, 1);
+
+    // response type
+    QLabel *responseTypeLabel = new QLabel(tr("Response Type: "));
+    responseTypeLabel->setAlignment(Qt::AlignLeft|Qt::AlignVCenter);
+    responseTypeLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    glayout->addWidget(responseTypeLabel, 5, 0);
+
+    responseTypeBox_ = new QComboBox(this);
+    QStringList responseTypeBoxItems;
+    responseTypeBoxItems
+        << tr("Yes/No/Abstain")
+        << tr("Single Choice")
+        << tr("Multiple Choice");
+    responseTypeBox_->addItems(responseTypeBoxItems);
+    glayout->addWidget(responseTypeBox_, 5, 1);
+
+    // cost
+    QLabel *costLabelLabel = new QLabel(tr("Cost:"));
+    costLabelLabel->setAlignment(Qt::AlignLeft|Qt::AlignVCenter);
+    costLabelLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    glayout->addWidget(costLabelLabel, 6, 0);
+
+    // TODO: make this dynamic when rewriting the voting GUI:
+    QLabel *costLabel = new QLabel(tr("50 GRC + transaction fee"));
+    costLabel->setAlignment(Qt::AlignLeft|Qt::AlignVCenter);
+    costLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    glayout->addWidget(costLabel, 6, 1);
 
     //answers
     answerList_ = new QListWidget(this);
@@ -978,6 +1123,15 @@ NewPollDialog::NewPollDialog(QWidget *parent)
 
 }
 
+void NewPollDialog::setModel(WalletModel *wallet_model)
+{
+    if (!wallet_model) {
+        return;
+    }
+
+    m_wallet_model = wallet_model;
+}
+
 void NewPollDialog::resetData()
 {
     answerList_->clear();
@@ -990,65 +1144,46 @@ void NewPollDialog::resetData()
 
 void NewPollDialog::createPoll(void)
 {
-    GetPollValues();
     pollNote_->setStyleSheet("QLabel { color : red; }");
+    PollBuilder builder = PollBuilder();
 
-    if(sPollTitle.isEmpty()){
-        pollNote_->setText(tr("Creating poll failed! Title is missing."));
-        return;
-    }
-    if(sPollDays.isEmpty()){
-        pollNote_->setText(tr("Creating poll failed! Days value is missing."));
-        return;
-    }
-    if(sPollDays.toInt() > 180){
-        pollNote_->setText(tr("Creating poll failed! Polls can not last longer than 180 days."));
-        return;
-    }
-    if(sPollQuestion.isEmpty()){
-        pollNote_->setText(tr("Creating poll failed! Question is missing."));
-        return;
-    }
-    if(sPollUrl.isEmpty()){
-        pollNote_->setText(tr("Creating poll failed! URL is missing."));
-        return;
-    }
-    if(sPollAnswers.isEmpty()){
-        pollNote_->setText(tr("Creating poll failed! Answer is missing."));
+    try {
+        builder = builder
+            .SetType(PollType::SURVEY)
+            .SetTitle(title_->text().toStdString())
+            .SetDuration(days_->text().toInt())
+            .SetQuestion(question_->text().toStdString())
+            // The dropdown list only contains non-deprecated weight type
+            // options which start from offset 2:
+            .SetWeightType(shareTypeBox_->currentIndex() + 2)
+            .SetResponseType(responseTypeBox_->currentIndex() + 1)
+            .SetUrl(url_->text().toStdString());
+
+        for (int row = 0; row < answerList_->count(); ++row) {
+            const QListWidgetItem* const item = answerList_->item(row);
+            builder = builder.AddChoice(item->text().toStdString());
+        }
+    } catch (const VotingError& e) {
+        pollNote_->setText(e.what());
         return;
     }
 
-    // replace spaces with underscores
-    sPollTitle.replace(" ","_");
-    sPollDays.replace(" ","_");
-    sPollQuestion.replace(" ","_");
-    sPollUrl.replace(" ","_");
-    sPollAnswers.replace(" ","_");
+    const WalletModel::UnlockContext unlock_context(m_wallet_model->requestUnlock());
 
-	std::pair<std::string,std::string> pollCreationResult = CreatePollContract(sPollTitle.toStdString(), sPollDays.toInt(), sPollQuestion.toStdString(), sPollAnswers.toStdString(), sPollShareType.toInt(), sPollUrl.toStdString());
-    const std::string &sResult = pollCreationResult.first + pollCreationResult.second;
-
-    if (sResult.find("Success") != std::string::npos) {
-        pollNote_->setStyleSheet("QLabel { color : green; }");
+    if (!unlock_context.isValid()) {
+        pollNote_->setText(tr("Please unlock the wallet."));
+        return;
     }
-    pollNote_->setText(QString::fromStdString(sResult));
-}
 
-void NewPollDialog::GetPollValues(void)
-{
-
-    sPollTitle = title_->text();
-    sPollDays = days_->text();
-    sPollQuestion = question_->text();
-    sPollUrl = url_->text();
-    sPollShareType = QString::number(shareTypeBox_->currentIndex() + 1);
-
-    sPollAnswers = "";
-    for(int row = 0; row < answerList_->count(); row++) {
-        QListWidgetItem *item = answerList_->item(row);
-        sPollAnswers += item->text() + ";";
+    try {
+        SendPollContract(std::move(builder));
+    } catch (const VotingError& e) {
+        pollNote_->setText(e.what());
+        return;
     }
-    sPollAnswers.chop(1);
+
+    pollNote_->setStyleSheet("QLabel { color : green; }");
+    pollNote_->setText("Success. The poll will activate with the next block.");
 }
 
 void NewPollDialog::addItem (void)

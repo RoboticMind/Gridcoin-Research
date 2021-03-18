@@ -1,34 +1,62 @@
 /* general */
 
+* {
+    font-family: "Inter";
+    font-size: 10pt;
+}
+
 QMainWindow {
-    font-family:'Open Sans';
+    font-family: "Inter";
+}
+
+QMenuBar {
+    background: rgb(240,240,240);
+    color: black;
+}
+
+QMenuBar::item {
+    padding-bottom:0.5em;
+    padding-top:0.5em;
+    padding-left:1em;
+    padding-right:1em;
+    color: black;
+    background-color: rgb(240,240,240);
+}
+
+QTextEdit {
+    background-color: white;
+}
+
+/* RPC Console */
+#messagesWidget, #lineEdit {
+    font-family: "Inconsolata";
+    font-size: 10pt;
 }
 
 /* Main Window*/
 
 #toolbar {
+    border:none;
     padding-top:1.25em;
-    min-width:8em;
+    min-width:8.5em;
     height:100%;
 }
 
 #toolbar2 {
     border:none;
-    background-color:qlineargradient(x1: 0, y1: 0, x2: 0.5, y2: 0.5,stop: 0 rgb(65,0,127), stop: 1 rgb(65,0,127));
     min-width:1.625em;
-    max-width:1.625em;
+    max-width:3em;
 }
 
 #toolbar3 {
     border:none;
-    background-color:rgb(65,0,127);
     min-height:3.25em;
     max-height:3.25em;
 }
 
 QToolBar#toolbar QToolButton {
-    padding-left:1em;
-    padding-right:1em;
+    padding-left:1.25em;
+    padding-right:1.25em;
     padding-top:0.5em;
     padding-bottom:0.5em;
     margin:0.25em;
@@ -51,7 +79,7 @@ QToolBar#toolbar3 QLabel{
     border:none;
 }
 
-#listTransactions{ 
+#listTransactions{
     background-color:transparent;
 }
 
@@ -81,82 +109,72 @@ QToolBar#toolbar3 QLabel{
 
 /* overview page */
 
-#labelOverviewWallet{
-    font-size:16pt;
+#overviewWalletLabel,
+#researcherHeaderLabel,
+#stakingHeaderLabel,
+#recentTransLabel {
+    font-size:15pt;
     font-weight:bold;
 }
 
-#labelAvailable{
+#availableLabel,
+#immatureTextLabel,
+#totalBalanceLabel {
     font-weight:bold;
 }
 
-#labelImmatureText{
-    font-weight:bold;
-}
-
-#labelTotalBalance{
-    font-weight:bold;
-}
-
-#labelRecentTrans{
-    font-size:16pt;
-    font-weight:bold;
-}
-
-#labelWalletStatus{
-    color: red;
-}
-
-#labelTransactionsStatus{
+#walletStatusLabel,
+#transactionsStatusLabel,
+#researcherAlertLabel {
     color: red;
 }
 
 /* coincontrol dialog*/
 
-#labelCoinControlFeatures{
+#coinControlFeaturesLabel{
     font-weight:bold;
 }
 
-#labelCoinControlInsuffFunds{
+#coinControlInsuffFundsLabel{
     color:red;
     font-weight:bold;
 }
 
-#labelCoinControlBytesText{
+#coinControlBytesTextLabel{
     font-weight:bold;
 }
 
-#labelCoinControlQuantityText{
+#coinControlQuantityTextLabel{
     font-weight:bold;
 }
 
-#labelCoinControlAmountText{
+#coinControlAmountTextLabel{
     font-weight:bold;
 }
 
-#labelCoinControlPriorityText{
+#coinControlPriorityTextLabel{
     font-weight:bold;
 }
 
-#labelCoinControlFeeText{
+#coinControlFeeTextLabel{
     font-weight:bold;
 }
 
-#labelCoinControlLowOutputText{
+#coinControlLowOutputTextLabel{
     font-weight:bold;
 }
 
-#labelCoinControlAfterFeeText{
+#coinControlAfterFeeTextLabel{
     font-weight:bold;
 }
 
-#labelCoinControlChangeText{
+#coinControlChangeTextLabel{
     font-weight:bold;
 }
 
 /* options dialog */
 
-#statusLabel{
+#OptionsDialog #statusLabel{
     font-weight:bold;
 }
 
@@ -179,5 +197,3 @@ QToolBar#toolbar3 QLabel{
 #capsLabel{
     font-weight:bold;
 }
-
-

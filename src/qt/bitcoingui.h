@@ -5,16 +5,17 @@
 #include <QSystemTrayIcon>
 #include <QMenu>
 #include <stdint.h>
+#include <memory>
+#include "guiconstants.h"
 
-#if defined(WIN32) && defined(QT_GUI)
-#include <QAxObject>
-#include <ActiveQt/qaxbase.h>
-#include <ActiveQt/qaxobject.h>
+#ifdef Q_OS_MAC
+#include <qt/macos_appnap.h>
 #endif
 
 class TransactionTableModel;
 class ClientModel;
 class WalletModel;
+class ResearcherModel;
 class TransactionView;
 class OverviewPage;
 class AddressBookPage;
@@ -33,6 +34,7 @@ class QAbstractItemModel;
 class QModelIndex;
 class QStackedWidget;
 class QUrl;
+class QMessageBox;
 QT_END_NAMESPACE
 
 /**
@@ -57,6 +59,10 @@ public:
     */
     void setWalletModel(WalletModel *walletModel);
 
+    /** Set the researcher model.
+        The researcher model provides the BOINC context for the research reward system.
+    */
+    void setResearcherModel(ResearcherModel *researcherModel);
 
 protected:
     void changeEvent(QEvent *e);
@@ -67,6 +73,7 @@ protected:
 private:
     ClientModel *clientModel;
     WalletModel *walletModel;
+    ResearcherModel *researcherModel;
 
     QStackedWidget *centralWidget;
 
@@ -77,11 +84,14 @@ private:
     SendCoinsDialog *sendCoinsPage;
     VotingDialog *votingPage;
     SignVerifyMessageDialog *signVerifyMessageDialog;
+    std::unique_ptr<QMessageBox> updateMessageDialog;
 
     QLabel *labelEncryptionIcon;
     QLabel *labelStakingIcon;
     QLabel *labelConnectionsIcon;
     QLabel *labelBlocksIcon;
+    QLabel *labelScraperIcon;
+    QLabel *labelBeaconIcon;
 
     QMenuBar *appMenuBar;
     QAction *overviewAction;
@@ -90,23 +100,19 @@ private:
     QAction *sendCoinsAction;
     QAction *addressBookAction;
     QAction *signMessageAction;
-	QAction *bxAction;
-	QAction *websiteAction;
-	QAction *boincAction;
-	QAction *chatAction;
-	QAction *exchangeAction;
-
-	QAction *miningAction;
-
+    QAction *bxAction;
+    QAction *websiteAction;
+    QAction *boincAction;
+    QAction *chatAction;
+    QAction *exchangeAction;
     QAction *votingAction;
-
-	QAction *newUserWizardAction;
-	QAction *diagnosticsAction;
-
+    QAction *diagnosticsAction;
     QAction *verifyMessageAction;
     QAction *aboutAction;
     QAction *receiveCoinsAction;
+    QAction *researcherAction;
     QAction *optionsAction;
+    QAction *openConfigAction;
     QAction *toggleHideAction;
     QAction *exportAction;
     QAction *encryptWalletAction;
@@ -115,6 +121,7 @@ private:
     QAction *unlockWalletAction;
     QAction *lockWalletAction;
     QAction *openRPCConsoleAction;
+    QAction *snapshotAction;
 
     QSystemTrayIcon *trayIcon;
     QMenu *trayIconMenu;
@@ -127,8 +134,14 @@ private:
 
     uint64_t nWeight;
 
+#ifdef Q_OS_MAC
+    CAppNapInhibitor* m_app_nap_inhibitor = nullptr;
+    bool app_nap_enabled = true;
+#endif
     // name extension to change icons according to stylesheet
     QString sSheet;
+
+    int STATUSBAR_ICONSIZE = UNSCALED_STATUSBAR_ICONSIZE * logicalDpiX() / 96;
 
     /** Create the main UI actions. */
     void createActions();
@@ -155,6 +168,9 @@ public slots:
     */
     void setEncryptionStatus(int status);
 
+    /** Notify the user if there is an update available */
+    void update(const QString& title, const QString& version, const QString& message);
+
     /** Notify the user of an error in the network or transaction handling code. */
     void error(const QString &title, const QString &message, bool modal);
     /** Asks the user whether to pay the transaction fee or to cancel the transaction.
@@ -167,9 +183,8 @@ public slots:
     */
     void askFee(qint64 nFeeRequired, bool *payFee);
 
-	void askQuestion(std::string caption, std::string body, bool *result);
+    void askQuestion(std::string caption, std::string body, bool *result);
 
-	void NewUserWizard();
     void handleURI(QString strURI);
     void setOptionsStyleSheet(QString qssFileName);
 
@@ -194,21 +209,22 @@ private slots:
 
     /** Show configuration dialog */
     void optionsClicked();
+    /** Show researcher/beacon configuration dialog */
+    void researcherClicked();
     /** Show about dialog */
     void aboutClicked();
+    /** Open config file */
+    void openConfigClicked();
 
-	void bxClicked();
-	void websiteClicked();
-	void exchangeClicked();
-	void boincClicked();
+    void bxClicked();
+    void websiteClicked();
+    void exchangeClicked();
+    void boincClicked();
     void boincStatsClicked();
-	void chatClicked();
-
-    void miningClicked();
-
+    void chatClicked();
     void diagnosticsClicked();
-	
-	void newUserWizardClicked();
+    void peersClicked();
+    void snapshotClicked();
 
 #ifndef Q_OS_MAC
     /** Handle tray icon clicked */
@@ -237,12 +253,12 @@ private slots:
 
     void updateWeight();
     void updateStakingIcon();
+    void updateScraperIcon(int scraperEventtype, int status);
+    void updateBeaconIcon();
 
-	QString GetEstimatedTime(unsigned int nEstimateTime);
+    QString GetEstimatedStakingFrequency(unsigned int nEstimateTime);
 
-	void timerfire();
-
-
+    void updateGlobalStatus();
 };
 
 #endif

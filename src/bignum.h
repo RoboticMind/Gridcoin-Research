@@ -286,12 +286,12 @@ public:
     {
         unsigned int nSize = BN_bn2mpi(pbn, NULL);
         if (nSize < 4)
-            return 0;
+            return uint256();
         std::vector<unsigned char> vch(nSize);
         BN_bn2mpi(pbn, &vch[0]);
         if (vch.size() > 4)
             vch[4] &= 0x7f;
-        uint256 n = 0;
+        uint256 n;
         for (unsigned int i = 0, j = vch.size()-1; i < sizeof(n) && j >= 4; i++, j--)
             ((unsigned char*)&n)[i] = vch[j];
         return n;
@@ -411,22 +411,17 @@ public:
         return ToString(16);
     }
 
-    unsigned int GetSerializeSize(int nType=0, int nVersion=PROTOCOL_VERSION) const
+    template<typename Stream>
+    void Serialize(Stream& s) const
     {
-        return ::GetSerializeSize(getvch(), nType, nVersion);
+        ::Serialize(s, getvch());
     }
 
     template<typename Stream>
-    void Serialize(Stream& s, int nType=0, int nVersion=PROTOCOL_VERSION) const
-    {
-        ::Serialize(s, getvch(), nType, nVersion);
-    }
-
-    template<typename Stream>
-    void Unserialize(Stream& s, int nType=0, int nVersion=PROTOCOL_VERSION)
+    void Unserialize(Stream& s)
     {
         std::vector<unsigned char> vch;
-        ::Unserialize(s, vch, nType, nVersion);
+        ::Unserialize(s, vch);
         setvch(vch);
     }
 
@@ -509,7 +504,7 @@ public:
      */
     static CBigNum generatePrime(const unsigned int numBits, bool safe = false) {
         CBigNum ret;
-        if(!BN_generate_prime_ex(&ret, numBits, (safe == true), NULL, NULL, NULL))
+        if(!BN_generate_prime_ex(&ret, numBits, safe, NULL, NULL, NULL))
             throw bignum_error("CBigNum::generatePrime*= :BN_generate_prime_ex");
         return ret;
     }

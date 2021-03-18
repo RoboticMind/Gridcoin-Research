@@ -10,10 +10,6 @@
 #include <QApplication>
 #include <QClipboard>
 
-
-
-std::string qtExecuteDotNetStringFunction(std::string function, std::string data);
-
 SendCoinsEntry::SendCoinsEntry(QWidget *parent) :
     QFrame(parent),
     ui(new Ui::SendCoinsEntry),
@@ -85,12 +81,23 @@ void SendCoinsEntry::setRemoveEnabled(bool enabled)
     ui->deleteButton->setEnabled(enabled);
 }
 
+void SendCoinsEntry::setMessageEnabled(bool enabled)
+{
+    ui->messageLabel->setVisible(enabled);
+    ui->messageText->setVisible(enabled);
+
+    if (!enabled) {
+        ui->messageText->clear();
+    }
+}
+
 void SendCoinsEntry::clear()
 {
     ui->payTo->clear();
     ui->addAsLabel->clear();
     ui->payAmount->clear();
     ui->payTo->setFocus();
+    ui->messageText->clear();
     // update the display unit, to not use the default ("BTC")
     updateDisplayUnit();
 }
@@ -136,7 +143,7 @@ SendCoinsRecipient SendCoinsEntry::getValue()
     rv.address = ui->payTo->text();
     rv.label = ui->addAsLabel->text();
     rv.amount = ui->payAmount->value();
-	rv.Message = ui->txtMessage->text();
+	rv.Message = ui->messageText->text();
     return rv;
 }
 
@@ -155,7 +162,7 @@ void SendCoinsEntry::setValue(const SendCoinsRecipient &value)
     ui->payTo->setText(value.address);
     ui->addAsLabel->setText(value.label);
     ui->payAmount->setValue(value.amount);
-	ui->txtMessage->setText(value.Message);
+	ui->messageText->setText(value.Message);
 }
 
 bool SendCoinsEntry::isClear()

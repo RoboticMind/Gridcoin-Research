@@ -12,8 +12,9 @@
 #endif
 
 #include <string>
-
 #include <stdint.h>
+
+#include "gridcoin/scraper/fwd.h"
 
 class CBasicKeyStore;
 class CWallet;
@@ -23,6 +24,7 @@ class uint256;
 enum ChangeType
 {
     CT_NEW,
+    CT_UPDATING,
     CT_UPDATED,
     CT_DELETED
 };
@@ -67,12 +69,15 @@ public:
     /** Show message box. */
     boost::signals2::signal<void (const std::string& message, const std::string& caption, int style)> ThreadSafeMessageBox;
 
+    /** Update notification message box. */
+    boost::signals2::signal<void (const std::string&version, const std::string& message)> UpdateMessageBox;
+
     /** Ask the user whether they want to pay a fee or not. */
     boost::signals2::signal<bool (int64_t nFeeRequired, const std::string& strCaption), boost::signals2::last_value<bool> > ThreadSafeAskFee;
 
 	/** Ask the user a question */
     boost::signals2::signal<bool (std::string caption, std::string body), boost::signals2::last_value<bool> > ThreadSafeAskQuestion;
-	
+
     /** Handle a URL passed at the command line. */
     boost::signals2::signal<void (const std::string& strURI)> ThreadSafeHandleURI;
 
@@ -91,11 +96,26 @@ public:
     /** Number of network connections changed. */
     boost::signals2::signal<void (int newNumConnections)> NotifyNumConnectionsChanged;
 
+    /** Ban list changed. */
+    boost::signals2::signal<void ()> BannedListChanged;
+
+    /** Researcher context changed */
+    boost::signals2::signal<void ()> ResearcherChanged;
+
+    /** Beacon changed */
+    boost::signals2::signal<void ()> BeaconChanged;
+
     /**
      * New, updated or cancelled alert.
      * @note called with lock cs_mapAlerts held.
      */
     boost::signals2::signal<void (const uint256 &hash, ChangeType status)> NotifyAlertChanged;
+
+    /**
+     * Scraper event type - new or update
+     * @note called with lock cs_ConvergedScraperStatsCache held.
+     */
+    boost::signals2::signal<void (const scrapereventtypes& ScraperEventtype, ChangeType status, const std::string& message)> NotifyScraperEvent;
 };
 
 extern CClientUIInterface uiInterface;

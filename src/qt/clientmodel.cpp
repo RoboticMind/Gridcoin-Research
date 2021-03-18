@@ -1,4 +1,6 @@
 #include "clientmodel.h"
+#include "qt/bantablemodel.h"
+#include "qt/peertablemodel.h"
 #include "guiconstants.h"
 #include "optionsmodel.h"
 #include "addresstablemodel.h"
@@ -6,21 +8,26 @@
 
 #include "alert.h"
 #include "main.h"
+#include "gridcoin/scraper/fwd.h"
+#include "gridcoin/staking/difficulty.h"
+#include "gridcoin/superblock.h"
 #include "ui_interface.h"
 #include "util.h"
 
 #include <QDateTime>
+#include <QDebug>
 #include <QTimer>
 
 static const int64_t nClientStartupTime = GetTime();
-double GetDifficulty(const CBlockIndex* blockindex = NULL);
+extern ConvergedScraperStats ConvergedScraperStatsCache;
 
 ClientModel::ClientModel(OptionsModel *optionsModel, QObject *parent) :
-    QObject(parent), optionsModel(optionsModel),
-    cachedNumBlocks(0), cachedNumBlocksOfPeers(0), pollTimer(0)
+    QObject(parent), optionsModel(optionsModel), peerTableModel(nullptr),
+    banTableModel(nullptr), cachedNumBlocks(0), cachedNumBlocksOfPeers(0), pollTimer(0)
 {
     numBlocksAtStartup = -1;
-
+    peerTableModel = new PeerTableModel(this);
+    banTableModel = new BanTableModel(this);
     pollTimer = new QTimer(this);
     pollTimer->setInterval(MODEL_UPDATE_DELAY);
     pollTimer->start();
@@ -123,6 +130,20 @@ void ClientModel::updateAlert(const QString &hash, int status)
     emit numBlocksChanged(getNumBlocks(), getNumBlocksOfPeers());
 }
 
+void ClientModel::updateScraper(int scraperEventtype, int status, const QString message)
+{
+    if (scraperEventtype == (int)scrapereventtypes::Log)
+        emit updateScraperLog(message);
+    else
+        emit updateScraperStatus(scraperEventtype, status);
+}
+
+// Requires a lock on cs_ConvergedScraperStatsCache
+const ConvergedScraperStats& ClientModel::getConvergedScraperStatsCache() const
+{
+    return ConvergedScraperStatsCache;
+}
+
 bool ClientModel::isTestNet() const
 {
     return fTestNet;
@@ -146,6 +167,16 @@ QString ClientModel::getStatusBarWarnings() const
 OptionsModel *ClientModel::getOptionsModel()
 {
     return optionsModel;
+}
+
+PeerTableModel *ClientModel::getPeerTableModel()
+{
+    return peerTableModel;
+}
+
+BanTableModel *ClientModel::getBanTableModel()
+{
+    return banTableModel;
 }
 
 QString ClientModel::formatFullVersion() const
@@ -182,13 +213,17 @@ QString ClientModel::formatBoostVersion()  const
 QString ClientModel::getDifficulty() const
 {
 	//12-2-2014;R Halford; Display POR Diff on RPC Console
-	double PORDiff = GetDifficulty(GetLastBlockIndex(pindexBest, true));
+	double PORDiff = GRC::GetCurrentDifficulty();
 
 	std::string diff = RoundToString(PORDiff,4);
 	return QString::fromStdString(diff);
 
 }
 
+void ClientModel::updateBanlist()
+{
+    banTableModel->refresh();
+}
 
 
 // Handlers for core signals
@@ -201,7 +236,7 @@ static void NotifyBlocksChanged(ClientModel *clientmodel)
 
 static void NotifyNumConnectionsChanged(ClientModel *clientmodel, int newNumConnections)
 {
-    // Too noisy: LogPrintf("NotifyNumConnectionsChanged %i", newNumConnections);
+    LogPrint(BCLog::NOISY, "NotifyNumConnectionsChanged %i", newNumConnections);
     QMetaObject::invokeMethod(clientmodel, "updateNumConnections", Qt::QueuedConnection,
                               Q_ARG(int, newNumConnections));
 }
@@ -214,18 +249,62 @@ static void NotifyAlertChanged(ClientModel *clientmodel, const uint256 &hash, Ch
                               Q_ARG(int, status));
 }
 
+static void BannedListChanged(ClientModel *clientmodel)
+{
+    qDebug() << QString("%1: Requesting update for peer banlist").arg(__func__);
+    QMetaObject::invokeMethod(clientmodel, "updateBanlist", Qt::QueuedConnection);
+}
+
+
+static void NotifyScraperEvent(ClientModel *clientmodel, const scrapereventtypes& ScraperEventtype, ChangeType status, const std::string& message)
+{
+    QMetaObject::invokeMethod(clientmodel, "updateScraper", Qt::QueuedConnection,
+                              Q_ARG(int, (int)ScraperEventtype),
+                              Q_ARG(int, status),
+                              Q_ARG(QString, QString::fromStdString(message)));
+}
+
+
+// This is ugly but is the easiest way to support the wide range of boost versions and deal with the
+// boost placeholders global namespace pollution fix for later versions (>= 1.73) without breaking earlier ones.
+#if BOOST_VERSION >= 107300
 void ClientModel::subscribeToCoreSignals()
 {
     // Connect signals to client
     uiInterface.NotifyBlocksChanged.connect(boost::bind(NotifyBlocksChanged, this));
-    uiInterface.NotifyNumConnectionsChanged.connect(boost::bind(NotifyNumConnectionsChanged, this, _1));
-    uiInterface.NotifyAlertChanged.connect(boost::bind(NotifyAlertChanged, this, _1, _2));
+    uiInterface.BannedListChanged.connect(boost::bind(BannedListChanged, this));
+    uiInterface.NotifyNumConnectionsChanged.connect(boost::bind(NotifyNumConnectionsChanged, this, boost::placeholders::_1));
+    uiInterface.NotifyAlertChanged.connect(boost::bind(NotifyAlertChanged, this, boost::placeholders::_1, boost::placeholders::_2));
+    uiInterface.NotifyScraperEvent.connect(boost::bind(NotifyScraperEvent, this, boost::placeholders::_1, boost::placeholders::_2, boost::placeholders::_3));
 }
 
 void ClientModel::unsubscribeFromCoreSignals()
 {
     // Disconnect signals from client
     uiInterface.NotifyBlocksChanged.disconnect(boost::bind(NotifyBlocksChanged, this));
+    uiInterface.BannedListChanged.disconnect(boost::bind(BannedListChanged, this));
+    uiInterface.NotifyNumConnectionsChanged.disconnect(boost::bind(NotifyNumConnectionsChanged, this, boost::placeholders::_1));
+    uiInterface.NotifyAlertChanged.disconnect(boost::bind(NotifyAlertChanged, this, boost::placeholders::_1, boost::placeholders::_2));
+    uiInterface.NotifyScraperEvent.disconnect(boost::bind(NotifyScraperEvent, this, boost::placeholders::_1, boost::placeholders::_2, boost::placeholders::_3));
+}
+#else
+void ClientModel::subscribeToCoreSignals()
+{
+    // Connect signals to client
+    uiInterface.NotifyBlocksChanged.connect(boost::bind(NotifyBlocksChanged, this));
+    uiInterface.BannedListChanged.connect(boost::bind(BannedListChanged, this));
+    uiInterface.NotifyNumConnectionsChanged.connect(boost::bind(NotifyNumConnectionsChanged, this, _1));
+    uiInterface.NotifyAlertChanged.connect(boost::bind(NotifyAlertChanged, this, _1, _2));
+    uiInterface.NotifyScraperEvent.connect(boost::bind(NotifyScraperEvent, this, _1, _2, _3));
+}
+
+void ClientModel::unsubscribeFromCoreSignals()
+{
+    // Disconnect signals from client
+    uiInterface.NotifyBlocksChanged.disconnect(boost::bind(NotifyBlocksChanged, this));
+    uiInterface.BannedListChanged.disconnect(boost::bind(BannedListChanged, this));
     uiInterface.NotifyNumConnectionsChanged.disconnect(boost::bind(NotifyNumConnectionsChanged, this, _1));
     uiInterface.NotifyAlertChanged.disconnect(boost::bind(NotifyAlertChanged, this, _1, _2));
+    uiInterface.NotifyScraperEvent.disconnect(boost::bind(NotifyScraperEvent, this, _1, _2, _3));
 }
+#endif

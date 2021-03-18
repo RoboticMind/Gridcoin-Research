@@ -5,10 +5,12 @@
 #ifndef BITCOIN_INIT_H
 #define BITCOIN_INIT_H
 
-#include "wallet.h"
+#include "wallet/wallet.h"
 #include <boost/thread.hpp>
 
 extern CWallet* pwalletMain;
+
+void InitLogging();
 
 void StartShutdown();
 
@@ -19,7 +21,8 @@ bool AppInit2(ThreadHandlerPtr threads);
 void ThreadAppInit2(ThreadHandlerPtr th);
 
 std::string HelpMessage();
+std::string VersionMessage();
 std::string LogSomething();
 
-
+extern bool fSnapshotRequest;
 #endif

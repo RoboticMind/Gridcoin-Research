@@ -4,6 +4,7 @@
 #include <QString>
 #include <QObject>
 #include <QMessageBox>
+#include "fs.h"
 
 QT_BEGIN_NAMESPACE
 class QFont;
@@ -22,6 +23,21 @@ namespace GUIUtil
     // Create human-readable string from date
     QString dateTimeStr(const QDateTime &datetime);
     QString dateTimeStr(qint64 nTime);
+
+    // Format Ping Time
+    QString formatPingTime(double dPingTime);
+
+    // Format Node Time Offset
+    QString formatTimeOffset(int64_t nTimeOffset);
+
+    // Format Bytes
+    QString formatBytes(uint64_t bytes);
+
+    //Format Duration
+    QString formatDurationStr(int secs);
+
+    // Format Services
+    QString formatServicesStr(quint64 mask);
 
     // Render Bitcoin addresses in monospace font
     QFont bitcoinAddressFont();
@@ -46,6 +62,14 @@ namespace GUIUtil
        @see  TransactionView::copyLabel, TransactionView::copyAmount, TransactionView::copyAddress
      */
     void copyEntryData(QAbstractItemView *view, int column, int role=Qt::EditRole);
+
+    QList<QModelIndex> getEntryData(QAbstractItemView *view, int column);
+
+    fs::path qstringToBoostPath(const QString &path);
+
+    QString boostPathToQString(const fs::path &path);
+
+    QString getDefaultDataDirectory();
 
     /** Get save filename, mimics QFileDialog::getSaveFileName, except that it appends a default suffix
         when no suffix is provided by the user.
@@ -92,8 +116,23 @@ namespace GUIUtil
         int size_threshold;
     };
 
+    /** Qt event filter that suppress context help question mark for all windows.
+     */
+
+    class WindowContextHelpButtonHintFilter : public QObject
+    {
+        Q_OBJECT
+
+    public:
+        explicit WindowContextHelpButtonHintFilter(QObject *parent = 0);
+
+    protected:
+        bool eventFilter(QObject *obj, QEvent *evt);
+    };
+
+
     bool GetStartOnSystemStartup();
-    bool SetStartOnSystemStartup(bool fAutoStart);
+    bool SetStartOnSystemStartup(bool fAutoStart, bool fStartMin);
 
     /** Help message for Bitcoin-Qt, shown with --help. */
     class HelpMessageBox : public QMessageBox

@@ -3,10 +3,11 @@
 #include <boost/test/unit_test.hpp>
 
 #include "main.h"
-#include "wallet.h"
+#include "streams.h"
+#include "wallet/wallet.h"
 
-#include "data/tx_valid.json.h"
-#include "data/tx_invalid.json.h"
+#include "test/data/tx_valid.json.h"
+#include "test/data/tx_invalid.json.h"
 
 #include <univalue.h>
 

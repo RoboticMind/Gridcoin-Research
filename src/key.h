@@ -8,8 +8,8 @@
 #include <stdexcept>
 #include <vector>
 
-#include "allocators.h"
 #include "serialize.h"
+#include "support/allocators/secure.h"
 #include "uint256.h"
 #include "util.h"
 
@@ -48,7 +48,7 @@ public:
 class CKeyID : public uint160
 {
 public:
-    CKeyID() : uint160(0) { }
+    CKeyID() : uint160() { }
     CKeyID(const uint160 &in) : uint160(in) { }
 };
 
@@ -56,7 +56,7 @@ public:
 class CScriptID : public uint160
 {
 public:
-    CScriptID() : uint160(0) { }
+    CScriptID() : uint160() { }
     CScriptID(const uint160 &in) : uint160(in) { }
 };
 
@@ -68,14 +68,27 @@ private:
 
 public:
     CPubKey() { }
-    CPubKey(const std::vector<unsigned char> &vchPubKeyIn) : vchPubKey(vchPubKeyIn) { }
+    CPubKey(std::vector<unsigned char> vchPubKeyIn) : vchPubKey(std::move(vchPubKeyIn)) { }
     friend bool operator==(const CPubKey &a, const CPubKey &b) { return a.vchPubKey == b.vchPubKey; }
     friend bool operator!=(const CPubKey &a, const CPubKey &b) { return a.vchPubKey != b.vchPubKey; }
     friend bool operator<(const CPubKey &a, const CPubKey &b) { return a.vchPubKey < b.vchPubKey; }
 
-    IMPLEMENT_SERIALIZE(
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action)
+    {
         READWRITE(vchPubKey);
-    )
+    }
+
+    static CPubKey Parse(const std::string& input)
+    {
+        if (input.empty()) {
+            return CPubKey();
+        }
+
+        return CPubKey(ParseHex(input));
+    }
 
     CKeyID GetID() const {
         return CKeyID(Hash160(vchPubKey));
@@ -95,6 +108,11 @@ public:
 
     std::vector<unsigned char> Raw() const {
         return vchPubKey;
+    }
+
+    std::string ToString() const
+    {
+        return HexStr(vchPubKey);
     }
 };
 
@@ -149,7 +167,7 @@ public:
     // This is only slightly more CPU intensive than just verifying it.
     // If this function succeeds, the recovered public key is guaranteed to be valid
     // (the signature is a valid signature of the given data for that key)
-		
+
     // Ensure that signature is DER-encoded
     static bool ReserealizeSignature(std::vector<unsigned char>& vchSig);
 

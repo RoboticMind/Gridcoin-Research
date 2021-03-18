@@ -23,10 +23,11 @@ openSUSE: `sudo zypper install git`
 Clone the repository and cd into it:
 
 ```bash
-git clone https://github.com/gridcoin/Gridcoin-Research
+git clone https://github.com/gridcoin-community/Gridcoin-Research
+git checkout master
 cd Gridcoin-Research
 ```
-Go to platform specific instructions for the required depencies below.
+Go to platform specific instructions for the required dependencies below.
 
 To Build
 ---------------------
@@ -34,13 +35,17 @@ To Build
 ```bash
 ./autogen.sh
 ./configure
-make
+make -j$(nproc --all) # core count by default, could be changed to the desired amount of threads
 make install # optional
 ```
 
 Or, to keep the source directory clean:
 ```bash
-./autogen.sh && mkdir build && ../configure && make
+./autogen.sh
+mkdir build
+cd build
+../configure
+make -j$(nproc --all) # core count by default, could be changed to the desired amount of threads
 ```
 
 This will build gridcoinresearch (Qt client) as well if the dependencies are met.
@@ -84,7 +89,7 @@ Options when installing required Boost library files:
 individual boost development packages, so the following can be used to only
 install necessary parts of boost:
 
-        sudo apt-get install libboost-system-dev libboost-filesystem-dev libboost-chrono-dev libboost-program-options-dev libboost-test-dev libboost-thread-dev
+        sudo apt-get install libboost-system-dev libboost-filesystem-dev libboost-chrono-dev libboost-program-options-dev libboost-test-dev libboost-thread-dev libboost-iostreams-dev libcurl4-gnutls-dev
 
 2. If that doesn't work, you can install all boost development packages with:
 
@@ -120,13 +125,7 @@ To build without GUI pass `--without-gui` to configure.
 
 To build with Qt 5 (recommended) you need the following:
 
-    sudo apt-get install libqt5gui5 libqt5core5a libqt5dbus5 qttools5-dev qttools5-dev-tools libprotobuf-dev protobuf-compiler
-
-If ```./configure``` fails to detect your QT installation, you have to run:
-
-		sudo apt-get install libqt5*
-
-to install all QT5 packages available for your Linux Distribution.
+    sudo apt-get install libqt5gui5 libqt5core5a libqt5charts5-dev libqt5dbus5 qttools5-dev qttools5-dev-tools libprotobuf-dev protobuf-compiler
 
 libqrencode (enabled by default, switch off by passing `--without-qrencode` to configure) can be installed with:
 
@@ -179,7 +178,7 @@ To build without GUI pass `--without-gui` to configure.
 
 To build with Qt 5 (recommended) you need the following:
 
-    sudo zypper install libQt5Gui5 libQt5Core5 libQt5DBus5 libQt5Network-devel libqt5-qttools-devel libqt5-qttools
+    sudo zypper install libQt5Gui5 libQt5Core5 libQt5Charts5 libQt5DBus5 libQt5Network-devel libqt5-qttools-devel libqt5-qttools
 
 Additionally for Tumbleweed:
 
@@ -193,12 +192,36 @@ Once these are installed, they will be found by configure and a gridcoinresearch
 built by default.
 
 
+Dependency Build Instructions: Alpine Linux
+----------------------------------------------
+
+Build requirements:
+
+    apk add autoconf automake boost-dev build-base curl-dev db-dev libtool libzip-dev miniupnpc-dev openssl-dev pkgconfig
+
+**Note:** Alpine Linux only includes Berkeley DB version 5.3 in the package repositories, so we must
+run _configure_ with the following option:
+
+    ./configure --with-incompatible-bdb
+
+To build the wallet with Berkeley DB version 4.8, we need to compile the library from source. See the
+[README](../depends/README.md) in the depends directory for one option.
+
+Dependencies for the GUI: Alpine Linux
+-----------------------------------------
+
+To build the Qt GUI on Alpine Linux, we need these dependencies:
+
+    apk add libqrencode-dev protobuf-dev qt5-qtbase-dev qt5-qtcharts-dev qt5-qtsvg-dev qt5-qttools-dev
+
+
 Setup and Build Example: Arch Linux
 -----------------------------------
 This example lists the steps necessary to setup and build a command line only of the latest changes on Arch Linux:
 
     pacman -S git base-devel boost libevent python
     git clone https://github.com/gridcoin/Gridcoin-Research.git
+    git checkout master
     cd Gridcoin-Research/
     ./autogen.sh
     ./configure --without-gui --without-miniupnpc

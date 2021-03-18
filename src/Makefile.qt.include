@@ -81,16 +81,29 @@ QT_FORMS_UI = \
   qt/forms/addressbookpage.ui \
   qt/forms/editaddressdialog.ui \
   qt/forms/overviewpage.ui \
+  qt/forms/researcherwizard.ui \
+  qt/forms/researcherwizardauthpage.ui \
+  qt/forms/researcherwizardbeaconpage.ui \
+  qt/forms/researcherwizardemailpage.ui \
+  qt/forms/researcherwizardinvestorpage.ui \
+  qt/forms/researcherwizardmodepage.ui \
+  qt/forms/researcherwizardmodedetailpage.ui \
+  qt/forms/researcherwizardpoolpage.ui \
+  qt/forms/researcherwizardpoolsummarypage.ui \
+  qt/forms/researcherwizardprojectspage.ui \
+  qt/forms/researcherwizardsummarypage.ui \
   qt/forms/sendcoinsdialog.ui \
   qt/forms/transactiondescdialog.ui \
   qt/forms/askpassphrasedialog.ui \
-  qt/forms/sendcoinsentry.ui
-  
+  qt/forms/sendcoinsentry.ui \
+  qt/forms/intro.ui
+
 QT_MOC_CPP = \
   qt/moc_aboutdialog.cpp \
   qt/moc_addressbookpage.cpp \
   qt/moc_addresstablemodel.cpp \
   qt/moc_askpassphrasedialog.cpp \
+  qt/moc_bantablemodel.cpp \
   qt/moc_bitcoinaddressvalidator.cpp \
   qt/moc_bitcoinamountfield.cpp \
   qt/moc_bitcoingui.cpp \
@@ -102,6 +115,7 @@ QT_MOC_CPP = \
   qt/moc_diagnosticsdialog.cpp \
   qt/moc_editaddressdialog.cpp \
   qt/moc_guiutil.cpp \
+  qt/moc_intro.cpp \
   qt/moc_macdockiconhandler.cpp \
   qt/moc_macnotificationhandler.cpp \
   qt/moc_monitoreddatamapper.cpp \
@@ -109,6 +123,7 @@ QT_MOC_CPP = \
   qt/moc_optionsdialog.cpp \
   qt/moc_optionsmodel.cpp \
   qt/moc_overviewpage.cpp \
+  qt/moc_peertablemodel.cpp \
   qt/moc_qvalidatedlineedit.cpp \
   qt/moc_qvaluecombobox.cpp \
   qt/moc_rpcconsole.cpp \
@@ -122,16 +137,30 @@ QT_MOC_CPP = \
   qt/moc_transactiontablemodel.cpp \
   qt/moc_transactionview.cpp \
   qt/moc_votingdialog.cpp \
-  qt/moc_walletmodel.cpp
+  qt/moc_walletmodel.cpp \
+  qt/researcher/moc_projecttablemodel.cpp \
+  qt/researcher/moc_researchermodel.cpp \
+  qt/researcher/moc_researcherwizard.cpp \
+  qt/researcher/moc_researcherwizardauthpage.cpp \
+  qt/researcher/moc_researcherwizardbeaconpage.cpp \
+  qt/researcher/moc_researcherwizardemailpage.cpp \
+  qt/researcher/moc_researcherwizardinvestorpage.cpp \
+  qt/researcher/moc_researcherwizardmodepage.cpp \
+  qt/researcher/moc_researcherwizardmodedetailpage.cpp \
+  qt/researcher/moc_researcherwizardpoolpage.cpp \
+  qt/researcher/moc_researcherwizardpoolsummarypage.cpp \
+  qt/researcher/moc_researcherwizardprojectspage.cpp \
+  qt/researcher/moc_researcherwizardsummarypage.cpp
 
 GRIDCOIN_MM = \
   qt/macdockiconhandler.mm \
-  qt/macnotificationhandler.mm
+  qt/macnotificationhandler.mm \
+  qt/macos_appnap.mm
 
 QT_MOC = \
+  qt/intro.moc \
   qt/overviewpage.moc \
-  qt/rpcconsole.moc \
-  qt/bitcoin.moc
+  qt/rpcconsole.moc
 
 QT_QRC_CPP = qt/qrc_bitcoin.cpp
 QT_QRC = qt/bitcoin.qrc
@@ -143,6 +172,7 @@ GRIDCOINRESEARCH_QT_H = \
   qt/addressbookpage.h \
   qt/addresstablemodel.h \
   qt/askpassphrasedialog.h \
+  qt/bantablemodel.h \
   qt/bitcoinaddressvalidator.h \
   qt/bitcoinamountfield.h \
   qt/bitcoingui.h \
@@ -156,16 +186,32 @@ GRIDCOINRESEARCH_QT_H = \
   qt/editaddressdialog.h \
   qt/guiconstants.h \
   qt/guiutil.h \
+  qt/intro.h \
   qt/macdockiconhandler.h \
   qt/macnotificationhandler.h \
+  qt/macos_appnap.h \
   qt/monitoreddatamapper.h \
   qt/notificator.h \
   qt/optionsdialog.h \
   qt/optionsmodel.h \
   qt/overviewpage.h \
+  qt/peertablemodel.h \
   qt/qtipcserver.h \
   qt/qvalidatedlineedit.h \
   qt/qvaluecombobox.h \
+  qt/researcher/projecttablemodel.h \
+  qt/researcher/researchermodel.h \
+  qt/researcher/researcherwizard.h \
+  qt/researcher/researcherwizardauthpage.h \
+  qt/researcher/researcherwizardbeaconpage.h \
+  qt/researcher/researcherwizardemailpage.h \
+  qt/researcher/researcherwizardinvestorpage.h \
+  qt/researcher/researcherwizardmodepage.h \
+  qt/researcher/researcherwizardmodedetailpage.h \
+  qt/researcher/researcherwizardpoolpage.h \
+  qt/researcher/researcherwizardpoolsummarypage.h \
+  qt/researcher/researcherwizardprojectspage.h \
+  qt/researcher/researcherwizardsummarypage.h \
   qt/rpcconsole.h \
   qt/sendcoinsdialog.h \
   qt/sendcoinsentry.h \
@@ -177,6 +223,7 @@ GRIDCOINRESEARCH_QT_H = \
   qt/transactionrecord.h \
   qt/transactiontablemodel.h \
   qt/transactionview.h \
+  qt/upgradeqt.h \
   qt/votingdialog.h \
   qt/walletmodel.h \
   qt/winshutdownmonitor.h
@@ -186,6 +233,7 @@ GRIDCOINRESEARCH_QT_CPP = \
   qt/addressbookpage.cpp \
   qt/addresstablemodel.cpp \
   qt/askpassphrasedialog.cpp \
+  qt/bantablemodel.cpp \
   qt/bitcoinaddressvalidator.cpp \
   qt/bitcoinamountfield.cpp \
   qt/bitcoingui.cpp \
@@ -198,14 +246,29 @@ GRIDCOINRESEARCH_QT_CPP = \
   qt/diagnosticsdialog.cpp \
   qt/editaddressdialog.cpp \
   qt/guiutil.cpp \
+  qt/intro.cpp \
   qt/monitoreddatamapper.cpp \
   qt/notificator.cpp \
   qt/optionsdialog.cpp \
   qt/optionsmodel.cpp \
   qt/overviewpage.cpp \
+  qt/peertablemodel.cpp \
   qt/qtipcserver.cpp \
   qt/qvalidatedlineedit.cpp \
   qt/qvaluecombobox.cpp \
+  qt/researcher/projecttablemodel.cpp \
+  qt/researcher/researchermodel.cpp \
+  qt/researcher/researcherwizard.cpp \
+  qt/researcher/researcherwizardauthpage.cpp \
+  qt/researcher/researcherwizardbeaconpage.cpp \
+  qt/researcher/researcherwizardemailpage.cpp \
+  qt/researcher/researcherwizardinvestorpage.cpp \
+  qt/researcher/researcherwizardmodepage.cpp \
+  qt/researcher/researcherwizardmodedetailpage.cpp \
+  qt/researcher/researcherwizardpoolpage.cpp \
+  qt/researcher/researcherwizardpoolsummarypage.cpp \
+  qt/researcher/researcherwizardprojectspage.cpp \
+  qt/researcher/researcherwizardsummarypage.cpp \
   qt/rpcconsole.cpp \
   qt/sendcoinsdialog.cpp \
   qt/sendcoinsentry.cpp \
@@ -217,14 +280,17 @@ GRIDCOINRESEARCH_QT_CPP = \
   qt/transactionrecord.cpp \
   qt/transactiontablemodel.cpp \
   qt/transactionview.cpp \
+  qt/upgradeqt.cpp \
   qt/votingdialog.cpp \
   qt/walletmodel.cpp \
   qt/winshutdownmonitor.cpp
 
 RES_ICONS = \
   qt/res/icons/add.png \
-  qt/res/icons/gridcoin.ico \
-  qt/res/icons/bitcoin_testnet.ico \
+  qt/res/icons/beacon_green.svg \
+  qt/res/icons/beacon_grey.svg \
+  qt/res/icons/beacon_red.svg \
+  qt/res/icons/beacon_yellow.svg \
   qt/res/icons/block.png \
   qt/res/icons/chat.png \
   qt/res/icons/clock1.png \
@@ -233,11 +299,11 @@ RES_ICONS = \
   qt/res/icons/clock4.png \
   qt/res/icons/clock5.png \
   qt/res/icons/configure.png \
-  qt/res/icons/connect0_16.png \
-  qt/res/icons/connect1_16.png \
-  qt/res/icons/connect2_16.png \
-  qt/res/icons/connect3_16.png \
-  qt/res/icons/connect4_16.png \
+  qt/res/icons/connect0.svg \
+  qt/res/icons/connect1.svg \
+  qt/res/icons/connect2.svg \
+  qt/res/icons/connect3.svg \
+  qt/res/icons/connect4.svg \
   qt/res/icons/debugwindow.png \
   qt/res/icons/edit.png \
   qt/res/icons/editcopy.png \
@@ -245,33 +311,38 @@ RES_ICONS = \
   qt/res/icons/ex.png \
   qt/res/icons/export.png \
   qt/res/icons/filesave.png \
-  qt/res/icons/gold_cpumined.gif \
+  qt/res/icons/gray_scraper.svg \
+  qt/res/icons/green_check.svg \
+  qt/res/icons/green_scraper.svg \
+  qt/res/icons/gridcoin.ico \
+  qt/res/icons/gridcoin_testnet.ico \
   qt/res/icons/key.png \
-  qt/res/icons/overview2.png \
+  qt/res/icons/message.svg \
+  qt/res/icons/notsynced.svg \
   qt/res/icons/qrcode.png \
   qt/res/icons/quit.png \
   qt/res/icons/remove.png \
-  qt/res/icons/rsz_chat.png \
-  qt/res/icons/staking_off.png \
-  qt/res/icons/staking_on.png \
-  qt/res/icons/statistics.png \
-  qt/res/icons/synced.png \
-  qt/res/icons/toolbar.png \
+  qt/res/icons/round_gray_x.svg \
+  qt/res/icons/round_green_check.svg \
+  qt/res/icons/staking_off.svg \
+  qt/res/icons/staking_on.svg \
+  qt/res/icons/staking_unable.svg \
+  qt/res/icons/superblock.svg \
+  qt/res/icons/transaction_conflicted.png \
   qt/res/icons/transaction0.png \
   qt/res/icons/transaction2.png \
-  qt/res/icons/transaction_conflicted.png \
-  qt/res/icons/tx2.png \
-  qt/res/icons/2tx_cpumined.png \
-  qt/res/icons/tx_minedoie_WOEI3ooIzGHI.png \
-  qt/res/icons/www.png \
-  qt/res/icons/wwww.png \
   qt/res/icons/tx_inout.svg \
   qt/res/icons/tx_input.svg \
-  qt/res/icons/tx_mined.svg \
   qt/res/icons/tx_output.svg \
   qt/res/icons/tx_por.svg \
-  qt/res/icons/tx_mined_ss.svg \
   qt/res/icons/tx_por_ss.svg \
+  qt/res/icons/tx_por_ss_sent.svg \
+  qt/res/icons/tx_pos.svg \
+  qt/res/icons/tx_pos_ss.svg \
+  qt/res/icons/tx_pos_ss_sent.svg \
+  qt/res/icons/warning.svg \
+  qt/res/icons/white_and_red_x.svg \
+  qt/res/icons/www.png \
   qt/res/icons/icons_native/overview.svg \
   qt/res/icons/icons_light/overview.svg \
   qt/res/icons/icons_dark/overview.svg \
@@ -295,18 +366,30 @@ RES_ICONS = \
   qt/res/icons/icons_dark/send.svg \
   qt/res/icons/icons_dark/transactions.svg \
   qt/res/icons/icons_light/transactions.svg \
-  qt/res/icons/icons_native/transactions.svg
+  qt/res/icons/icons_native/transactions.svg \
+  qt/res/icons/icons_light/chevron_down.svg \
+  qt/res/icons/icons_dark/chevron_down.svg
 
 RES_IMAGES = \
-  qt/res/images/splash3.png \
-  qt/res/images/boinc_logo.svg \
   qt/res/images/about.svg \
-  qt/res/images/gridcoin_horizontal.svg \
+  qt/res/images/about_light.svg \
+  qt/res/images/boinc_logo.svg \
   qt/res/images/boinc_logo_white.svg \
   qt/res/images/gridcoin.svg \
-  qt/res/images/about_light.svg
+  qt/res/images/gridcoin_horizontal.svg \
+  qt/res/images/gridcoin_testnet.svg \
+  qt/res/images/ic_investor_active.svg \
+  qt/res/images/ic_investor_inactive.svg \
+  qt/res/images/ic_pool_active.svg \
+  qt/res/images/ic_pool_inactive.svg \
+  qt/res/images/ic_solo_active.svg \
+  qt/res/images/ic_solo_inactive.svg \
+  qt/res/images/splash3.png
 
-RES_MOVIES = qt/res/movies/update_spinner.gif
+RES_FONTS = \
+  qt/res/fonts/Inconsolata-Regular.ttf \
+  qt/res/fonts/Inter-Bold.ttf \
+  qt/res/fonts/Inter-Regular.ttf
 
 RES_STYLESHEETS = \
   qt/res/stylesheets/light_stylesheet.qss \
@@ -332,10 +415,10 @@ qt_libgridcoinqt_a_CPPFLAGS = $(AM_CPPFLAGS) $(GRIDCOIN_INCLUDES) $(GRIDCOIN_QT_
 qt_libgridcoinqt_a_CXXFLAGS = $(AM_CXXFLAGS) $(QT_PIE_FLAGS)
 
 qt_libgridcoinqt_a_SOURCES = $(GRIDCOINRESEARCH_QT_CPP) $(GRIDCOINRESEARCH_QT_H) $(QT_FORMS_UI) \
-  $(QT_QRC) $(QT_QRC_LOCALE) $(QT_TS) $(PROTOBUF_PROTO) $(RES_ICONS) $(RES_IMAGES) $(RES_MOVIES) $(RES_STYLESHEETS)
+  $(QT_QRC) $(QT_QRC_LOCALE) $(QT_TS) $(PROTOBUF_PROTO) $(RES_ICONS) $(RES_IMAGES) $(RES_FONTS) $(RES_MOVIES) $(RES_STYLESHEETS)
 
 if TARGET_WINDOWS
-qt_libgridcoinqt_a_SOURCES += $(GRIDCOIN_CORE_H) $(GRIDCOIN_CORE_CPP) neuralnet.cpp
+qt_libgridcoinqt_a_SOURCES += $(GRIDCOIN_CORE_H) $(GRIDCOIN_CORE_CPP)
 qt_libgridcoinqt_a_CXXFLAGS += -DUNICODE
 endif
 
@@ -370,7 +453,7 @@ else
 endif
 qt_gridcoinresearch_LDADD += $(LIBUNIVALUE) $(LIBLEVELDB) $(LIBLEVELDB_SSE42) $(LIBGRIDCOIN_CRYPTO) $(LIBMEMENV) \
   $(BOOST_LIBS) $(QT_LIBS) $(QT_DBUS_LIBS) $(QR_LIBS) $(PROTOBUF_LIBS) $(BDB_LIBS) $(SSL_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS)\
-  $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS)
+  $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(CURL_LIBS) $(LIBZIP_LIBS)
 qt_gridcoinresearch_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(QT_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
 qt_gridcoinresearch_LIBTOOLFLAGS = $(AM_LIBTOOLFLAGS) --tag CXX
 
@@ -391,7 +474,7 @@ $(QT_QRC_LOCALE_CPP): $(QT_QRC_LOCALE) $(QT_QM)
 	  $(SED) -e '/^\*\*.*Created:/d' -e '/^\*\*.*by:/d' > $@
 	@rm $(@D)/temp_$(<F)
 
-$(QT_QRC_CPP): $(QT_QRC) $(QT_FORMS_H) $(RES_ICONS) $(RES_IMAGES) $(RES_MOVIES) $(RES_STYLESHEETS) $(PROTOBUF_H)
+$(QT_QRC_CPP): $(QT_QRC) $(QT_FORMS_H) $(RES_ICONS) $(RES_IMAGES) $(RES_FONTS) $(RES_MOVIES) $(RES_STYLESHEETS) $(PROTOBUF_H)
 	@test -f $(RCC)
 	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(RCC) -name bitcoin $< | \
 	  $(SED) -e '/^\*\*.*Created:/d' -e '/^\*\*.*by:/d' > $@
@@ -403,7 +486,7 @@ CLEANFILES += $(CLEAN_QT)
 gridcoinresearch_clean: FORCE
 	rm -f $(CLEAN_QT) $(qt_gridcoinresearch_OBJECTS) qt/gridcoinresearch$(EXEEXT)
 
-gridcoinresearch: 
+gridcoinresearch:
 	@echo "$(ZIP_LIBS)"
 	qt/gridcoinresearch$(EXEEXT)
 

@@ -1,7 +1,11 @@
+// Copyright (c) 2014-2020 The Gridcoin developers
+// Distributed under the MIT/X11 software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #ifndef VOTINGDIALOG_H
 #define VOTINGDIALOG_H
 
-#include "contract/polls.h"
+#include "uint256.h"
 
 #include <time.h>
 #include <QAbstractTableModel>
@@ -36,6 +40,8 @@ class QObject;
 class QResizeEvent;
 QT_END_NAMESPACE
 
+class WalletModel;
+
 #define VOTINGDIALOG_WIDTH_RowNumber          40
 #define VOTINGDIALOG_WIDTH_Title              225
 #define VOTINGDIALOG_WIDTH_Expiration         175
@@ -44,14 +50,31 @@ QT_END_NAMESPACE
 #define VOTINGDIALOG_WIDTH_TotalShares        100
 #define VOTINGDIALOG_WIDTH_BestAnswer         80
 
+namespace polling {
+// TODO: Legacy struct moved here until we redesign the voting GUI.
+struct Vote {
+    std::string answer;
+    double shares;
+    double participants;
+
+    Vote(std::string answer, double shares, double participants)
+        : answer(std::move(answer))
+        , shares(shares)
+        , participants(participants)
+    {
+    }
+};
+}
+
 class VotingItem {
 public:
     unsigned int rowNumber_;
+    uint256 pollTxid_;
     QString title_;
     QDateTime expiration_;
     QString shareType_;
+    QString responseType_;
     QString question_;
-    QString answers_;
     std::vector<polling::Vote> vectorOfAnswers_;
     unsigned int totalParticipants_;
     unsigned int totalShares_;
@@ -102,7 +125,6 @@ public:
     void resetData(bool history);
 
 private:
-    std::vector<polling::Poll> Polls;
     QStringList columns_;
     QList<VotingItem *> data_;
 };
@@ -139,8 +161,12 @@ class VotingDialog
 
 public:
     explicit VotingDialog(QWidget *parent=0);
+    void setModel(WalletModel *wallet_model);
 
 private:
+    // The number of milliseconds of age at which the poll data is stale. Currently one hour equivalent.
+    static constexpr int64_t STALE = 60 * 60 * 1000;
+
     QLineEdit *filterTQAU;
     QPushButton *resetButton;
     QPushButton *histButton;
@@ -153,6 +179,8 @@ private:
     NewPollDialog *pollDialog_;
     QLabel *loadingIndicator;
     QFutureWatcher<void> watcher;
+    QTimer* vote_update_age_timer = new QTimer(this);
+    bool stale = false;
 
 private:
     virtual void showEvent(QShowEvent *);
@@ -162,6 +190,7 @@ private:
 
 private slots:
     void onLoadingFinished(void);
+    void setStale(void);
 
 public slots:
     void filterTQAUChanged(const QString &);
@@ -191,7 +220,8 @@ private:
 #ifdef QT_CHARTS_LIB
     QtCharts::QChart *chart_;
 #endif
-    QTableWidget *answerTable_;
+    QTableView *answerTable_;
+    QStandardItemModel *answerModel_;
     QStringList answerTableHeader;
     QLabel *answer_;
 };
@@ -205,18 +235,20 @@ class VotingVoteDialog
 
 public:
     explicit VotingVoteDialog(QWidget *parent=0);
+    void setModel(WalletModel *wallet_model);
     void resetData(const VotingItem *);
 
 private:
+    WalletModel *m_wallet_model;
     QLabel *question_;
     QLabel *url_;
+    QLabel *responseType_;
     QLabel *answer_;
     QLabel *voteNote_;
     QListWidget *answerList_;
     QListWidgetItem *answerItem;
     QPushButton *voteButton;
-    QString GetVoteValue(void);
-    QString sVoteTitle;
+    uint256 pollTxid_;
 
 private slots:
     void vote(void);
@@ -231,16 +263,19 @@ class NewPollDialog
 
 public:
     explicit NewPollDialog(QWidget *parent=0);
+    void setModel(WalletModel *wallet_model);
 
 public slots:
     void resetData(void);
 
 private:
+    WalletModel *m_wallet_model;
     QLineEdit *title_;
     QLineEdit *days_;
     QLineEdit *question_;
     QLineEdit *url_;
     QComboBox *shareTypeBox_;
+    QComboBox *responseTypeBox_;
     QLabel *pollNote_;
     QListWidget *answerList_;
     QListWidgetItem *answerItem;
@@ -248,13 +283,6 @@ private:
     QPushButton *removeItemButton;
     QPushButton *clearAllButton;
     QPushButton *pollButton;
-    void GetPollValues(void);
-    QString sPollTitle;
-    QString sPollDays;
-    QString sPollQuestion;
-    QString sPollUrl;
-    QString sPollShareType;
-    QString sPollAnswers;
 
 private slots:
     void createPoll(void);
